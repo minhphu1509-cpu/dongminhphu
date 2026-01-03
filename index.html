@@ -1,45 +1,60 @@
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đồng Minh Phú | Elite Software Architect</title>
+    <title>ĐỒNG MINH PHÚ.AI | Elite Software Architect</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-dark: #020617;
+            --accent-indigo: #6366f1;
+        }
         body {
             font-family: 'Inter', sans-serif;
             scroll-behavior: smooth;
-            background-color: #020617;
+            background-color: var(--bg-dark);
             color: #f1f5f9;
             overflow-x: hidden;
         }
         .glass {
-            background: rgba(15, 23, 42, 0.75);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
         .text-gradient {
-            background: linear-gradient(135deg, #818cf8 0%, #22d3ee 100%);
+            background: linear-gradient(135deg, #a5b4fc 0%, #22d3ee 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
+        .bg-grid {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
         .custom-scrollbar::-webkit-scrollbar {
-            width: 5px;
+            width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(99, 102, 241, 0.3);
+            background: rgba(99, 102, 241, 0.2);
             border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(99, 102, 241, 0.6);
+            background: rgba(99, 102, 241, 0.4);
+        }
+        /* Mobile menu hardware acceleration */
+        .mobile-menu-enter {
+            transform: translateY(-100%);
+        }
+        .mobile-menu-enter-active {
+            transform: translateY(0);
+            transition: transform 0.3s ease-out;
         }
     </style>
 <script type="importmap">
@@ -56,7 +71,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body>
+<body class="bg-grid">
     <div id="root"></div>
     <script type="module" src="index.tsx"></script>
 <script type="module" src="/index.tsx"></script>

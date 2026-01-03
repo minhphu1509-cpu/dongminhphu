@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   Github, 
@@ -59,13 +58,53 @@ import {
   Image as ImageLucide,
   BarChart3,
   Clock,
-  Inbox
+  Inbox,
+  KeyRound,
+  Users,
+  FileDown,
+  MailCheck,
+  Bot,
+  BrainCircuit,
+  Handshake,
+  Lightbulb,
+  Video,
+  BookOpen,
+  MousePointer2,
+  Maximize2,
+  Trash,
+  Search,
+  Key,
+  Activity,
+  GraduationCap,
+  Rocket,
+  ShieldAlert,
+  ChevronDown,
+  Filter,
+  PlusCircle,
+  Pencil,
+  FileText,
+  UserCog,
+  Share2,
+  Link as LinkIcon
 } from 'lucide-react';
-import { motion, AnimatePresence, useScroll, useTransform, useSpring } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useSpring, useMotionValue, useTransform as useMotionTransform, animate } from 'framer-motion';
 import { GoogleGenAI, Type } from "@google/genai";
 
-// --- Database & Storage Utilities ---
+// --- Custom Icons ---
+const TiktokIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-5.201 1.743l-.002-.001.002.001a2.895 2.895 0 0 1 3.183-4.51v-3.5a6.329 6.329 0 0 0-5.394 10.692 6.33 6.33 0 0 0 10.857-4.424V8.687a8.182 8.182 0 0 0 4.773 1.526V6.79a4.831 4.831 0 0 1-1.003-.104z"/>
+  </svg>
+);
 
+const ZaloIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 36.84C5.07 33.36 2 27.91 2 21.82 2 10.87 11.85 2 24 2s22 8.87 22 19.82-9.85 19.82-22 19.82c-2.88 0-5.61-.49-8.13-1.39L2 46l8-9.16z" fill="currentColor"/>
+    <path d="M22 14h6v3h-6zM16 14h6v15h-6zM28 26h-6v-3h6zM23.8 20.5h4.4l-6.2 8.5H17.6l6.2-8.5z" fill="#020617"/>
+  </svg>
+);
+
+// --- Database & Storage Utilities ---
 const DB_NAME = 'PhuPortfolioDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'siteData';
@@ -80,7 +119,7 @@ const initDB = (): Promise<IDBDatabase> => {
       }
     };
     request.onsuccess = (event: any) => resolve(event.target.result);
-    request.onerror = (event: any) => reject(event.target.error);
+    request.onerror = (event: any) => reject(request.error);
   });
 };
 
@@ -101,32 +140,72 @@ const getFromDB = async (key: string) => {
     const transaction = db.transaction(STORE_NAME, 'readonly');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.get(key);
-    request.onsuccess = (event: any) => resolve(request.result);
-    request.onerror = (event: any) => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
   });
 };
 
 // --- Types & Constants ---
 type Language = 'vi' | 'en';
-type ThemeColor = 'indigo' | 'emerald' | 'rose' | 'amber';
-type ProjectCategory = 'All' | 'Web App' | 'AI/ML' | 'Architecture';
+type ThemeColor = 'indigo' | 'emerald' | 'rose' | 'amber' | 'vibe';
 
 interface Project {
   id: string;
   title: string;
   desc: string;
+  longDesc: string;
   tags: string[];
   cat: string;
   image?: string;
+  link?: string;
+  github?: string;
+  highlights?: string[];
+}
+
+interface Course {
+  id: string;
+  name: string;
+  level: string;
+  duration: string;
+  desc: string;
+}
+
+interface Skill {
+  id: string;
+  cat: string;
+  icon: string;
+  items: string[];
+}
+
+interface ChatLogEntry {
+  sessionId: string;
+  role: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+}
+
+interface Registration {
+  id: string;
+  name: string;
+  email: string;
+  course: string;
+  timestamp: string;
 }
 
 interface Inquiry {
   id: string;
   name: string;
   email: string;
-  phone: string;
   message: string;
   timestamp: string;
+}
+
+interface SocialLinks {
+  facebook?: string;
+  youtube?: string;
+  tiktok?: string;
+  zalo?: string;
+  website?: string;
 }
 
 const THEMES: Record<ThemeColor, { primary: string, border: string, bg: string, text: string }> = {
@@ -134,1133 +213,183 @@ const THEMES: Record<ThemeColor, { primary: string, border: string, bg: string, 
   emerald: { primary: 'bg-emerald-600', border: 'border-emerald-500/20', bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
   rose: { primary: 'bg-rose-600', border: 'border-rose-500/20', bg: 'bg-rose-500/10', text: 'text-rose-400' },
   amber: { primary: 'bg-amber-600', border: 'border-amber-500/20', bg: 'bg-amber-500/10', text: 'text-amber-400' },
+  vibe: { primary: 'bg-purple-600', border: 'border-purple-500/20', bg: 'bg-purple-500/10', text: 'text-purple-400' },
 };
 
-// --- Default Data ---
+const THEME_COLORS: Record<ThemeColor, string> = {
+  indigo: 'indigo',
+  emerald: 'emerald',
+  rose: 'rose',
+  amber: 'amber',
+  vibe: 'purple',
+};
+
 const DEFAULT_TRANSLATIONS = {
   vi: {
-    nav: { home: 'Trang chủ', about: 'Giới thiệu', skills: 'Kỹ năng', projects: 'Dự án', experience: 'Kinh nghiệm', lab: 'Phòng Lab', contact: 'Liên hệ', getInTouch: 'Liên hệ ngay' },
-    hero: { badge: 'Sẵn sàng cho các cơ hội mới', titlePrefix: 'Kiến tạo', titleSuffix: 'Tương lai của Web.', bio: 'Tôi là Đồng Minh Phú, một kiến trúc sư phần mềm tận tâm với việc xây dựng các hệ thống hiệu suất cao và tích hợp AI trực quan.', explore: 'Khám phá sản phẩm' },
-    about: { title: 'Bản sắc Kỹ thuật', stats: { projects: 'Dự án đã bàn giao', lines: 'Dòng mã nguồn' }, expTitle: '6+ NĂM', expDesc: 'Kỹ thuật hóa các giải pháp tác động cao.' },
-    skills: { title: 'Năng lực Cốt lõi', subtitle: 'Nền tảng công nghệ tôi tin dùng.', cat1: 'Chuyên môn Frontend', cat2: 'Hệ thống Backend', cat3: 'Cloud & DevOps' },
-    projects: { title: 'Dự án Tiêu biểu', subtitle: 'Trình diễn sự xuất sắc kỹ thuật.', filters: ['Tất cả', 'Ứng dụng Web', 'AI/ML', 'Kiến trúc'] },
-    testimonials: { title: 'Đánh giá từ đối tác', subtitle: 'Những phản hồi về chất lượng dịch vụ và tư vấn kỹ thuật.' },
-    codelab: { title: 'Code Lab', subtitle: 'Trình diễn những cấu trúc mã nguồn tối ưu.' },
-    ailab: { title: 'AI Innovation Lab', subtitle: 'Mô tả ý tưởng của bạn, và tôi sẽ kiến tạo bản demo ngay lập tức.', placeholder: 'Ví dụ: Tạo landing page cho startup công nghệ xanh với phong cách tối giản...', button: 'Kiến tạo Demo', generating: 'Đang thiết lập cấu trúc...', result: 'Kết quả Demo' },
-    newsletter: { title: 'Tech Insights', subtitle: 'Đăng ký nhận những phân tích chuyên sâu hàng tuần về Cloud & AI.', placeholder: 'Email của bạn...', button: 'Đăng ký' },
-    contact: { title: 'Sẵn sàng khởi động', titleSuffix: 'dự án lớn tiếp theo?', labels: { name: 'Họ tên', email: 'Email', phone: 'Số điện thoại', message: 'Tin nhắn', send: 'Gửi yêu cầu', success: 'Cảm ơn! Tôi sẽ phản hồi sớm nhất.' } },
-    chat: { welcome: "Chào mừng! Tôi là bản sao số của Phú. Tôi có thể giúp gì cho bạn?", agent: "Phú Agent v3.0", typing: "Đang gõ..." },
-    terminal: { welcome: "Hệ điều hành PhúOS v1.0.0. Gõ 'help' để xem các lệnh.", placeholder: "Gõ lệnh tại đây..." },
-    stats: { visits: 'Lượt truy cập' }
+    nav: { home: 'Trang chủ', about: 'Hồ sơ', skills: 'Kỹ năng', projects: 'Dự án', lab: 'AI Lab', course: 'Academy', contact: 'Liên hệ' },
+    hero: { badge: 'Sẵn sàng cho các cơ hội đột phá', titlePrefix: 'Kiến tạo', titleSuffix: 'Tương lai số.', bio: 'Tôi là Đồng Minh Phú, kiến trúc sư phần mềm chuyên nghiệp, tập trung vào xây dựng hệ thống hiệu năng cao và tích hợp AI thông minh.', explore: 'Xem các dự án' },
+    about: { title: 'Hành trình & Năng lực', stats: { projects: 'Dự án hoàn thiện', lines: 'Dòng mã sạch', visits: 'Lượt truy cập' }, expTitle: '6+ NĂM', expDesc: 'Kỹ thuật hóa các giải pháp quy mô lớn.', role: 'Kiến trúc sư Phần mềm Cấp cao', bioExtended: 'Hành trình 6 năm qua đã giúp tôi xây dựng tư duy "Product-Engineering" - không chỉ viết code mà là giải quyết vấn đề kinh doanh.' },
+    skills: { title: 'Hệ sinh thái Kỹ thuật', subtitle: 'Các công nghệ lõi tôi sử dụng để xây dựng hệ thống bền vững.' },
+    projects: { title: 'Kho Lưu trữ Dự án', subtitle: 'Minh chứng cho sự xuất sắc về kỹ thuật và tư duy thẩm mỹ.', filters: { all: 'Tất cả', web: 'Ứng dụng Web', ai: 'AI/ML', arch: 'Kiến trúc' }, searchPlaceholder: 'Tìm dự án...', viewDetails: 'Chi tiết', liveDemo: 'Bản Demo', github: 'Mã nguồn', techStack: 'Công nghệ', highlights: 'Điểm nhấn', noResults: 'Không tìm thấy kết quả.' },
+    ailab: { title: 'AI Innovation Lab', subtitle: 'Mô tả ý tưởng của bạn, và tôi sẽ kiến tạo bản demo ngay lập tức.', placeholder: 'Ví dụ: App quản lý tài chính tối giản...', button: 'Kiến tạo ngay', generating: 'Đang thiết kế...', result: 'Bản Demo AI' },
+    course: { 
+      title: 'Phú Academy', 
+      subtitle: 'Nâng tầm tư duy lập trình và làm chủ kỷ nguyên AI.', 
+      enroll: 'Đăng ký ngay', 
+      success: 'Chúc mừng! Bạn đã ghi danh thành công.'
+    },
+    contact: { title: 'Bắt đầu ý tưởng', titleSuffix: 'mới cùng tôi?', labels: { name: 'Họ tên', email: 'Email', message: 'Nội dung', send: 'Gửi yêu cầu', success: 'Cảm ơn! Phú sẽ liên hệ lại sớm.' }, infoTitle: 'Thông tin' },
+    chat: { welcome: "Xin chào! Tôi là Phú Digital. Bạn cần tư vấn về Vibe Coding hay kiến trúc hệ thống?", agent: "Phú AI v4.0", typing: "Đang nghĩ...", quickReplies: ["Vibe Coding", "Tư vấn kiến trúc", "Báo giá AI"] },
+    terminal: { welcome: "PhúOS v1.1.0 Admin Console. Gõ 'help' để xem lệnh.", placeholder: "Lệnh..." },
+    footer: { copyright: '© {year} ĐỒNG MINH PHÚ — VIBE CODING EDITION', live: 'Đang trực tuyến' }
   },
   en: {
-    nav: { home: 'Home', about: 'About', skills: 'Skills', projects: 'Projects', experience: 'Experience', lab: 'AI Lab', contact: 'Contact', getInTouch: 'Get in Touch' },
-    hero: { badge: 'Available for new opportunities', titlePrefix: 'Engineering the', titleSuffix: 'Future of Web.', bio: "I'm Đồng Minh Phú, a software architect dedicated to building high-performance systems and intuitive AI integrations.", explore: 'Explore My Work' },
-    about: { title: 'Engineering Identity', stats: { projects: 'Projects Shipped', lines: 'Lines of Code' }, expTitle: '6+ YRS', expDesc: 'Engineering high-impact solutions.' },
-    skills: { title: 'Core Competencies', subtitle: 'The stack I trust for building scalable systems.', cat1: 'Frontend Expertise', cat2: 'Backend Systems', cat3: 'Cloud & DevOps' },
-    projects: { title: 'Selected Projects', subtitle: 'Showcasing technical excellence.', filters: ['All', 'Web App', 'AI/ML', 'Architecture'] },
-    testimonials: { title: 'Testimonials', subtitle: 'Feedback from partners on quality and technical consulting.' },
-    codelab: { title: 'Code Lab', subtitle: 'Showcasing optimized architectural snippets.' },
-    ailab: { title: 'AI Innovation Lab', subtitle: 'Describe your vision, and I will architect a live demo in seconds.', placeholder: 'e.g., A minimalist landing page for a sustainable fashion brand...', button: 'Generate Demo', generating: 'Architecting your vision...', result: 'Live Demo Result' },
-    newsletter: { title: 'Tech Insights', subtitle: 'Subscribe for weekly deep dives into Cloud & AI.', placeholder: 'Your email...', button: 'Subscribe' },
-    contact: { title: 'Ready to start', titleSuffix: 'the next big thing?', labels: { name: 'Full Name', email: 'Email', phone: 'Phone Number', message: 'Message', send: 'Send Inquiry', success: 'Thank you! I will get back to you soon.' } },
-    chat: { welcome: "Welcome! I'm Phú's digital twin. How can I assist you today?", agent: "Phú Agent v3.0", typing: "Typing..." },
-    terminal: { welcome: "PhúOS v1.0.0. Type 'help' for available commands.", placeholder: "Enter command..." },
-    stats: { visits: 'Visits' }
+    nav: { home: 'Home', about: 'Profile', skills: 'Skills', projects: 'Projects', lab: 'AI Lab', course: 'Academy', contact: 'Contact' },
+    hero: { badge: 'Open for breakthrough opportunities', titlePrefix: 'Engineering the', titleSuffix: 'Digital Future.', bio: "I'm Đồng Minh Phú, a software architect dedicated to building high-performance systems and intelligent AI integrations.", explore: 'Explore Projects' },
+    about: { title: 'Identity & Expertise', stats: { projects: 'Projects Delivered', lines: 'Lines of Code', visits: 'Total Visits' }, expTitle: '6+ YRS', expDesc: 'Architecting high-impact solutions.', role: 'Senior Software Architect', bioExtended: '6 years of building a "Product-Engineering" mindset - solving business problems with optimal technology.' },
+    skills: { title: 'Technical Ecosystem', subtitle: 'The core stack I trust for building resilient systems.' },
+    projects: { title: 'Project Repository', subtitle: 'Showcasing technical excellence and aesthetic precision.', filters: { all: 'All', web: 'Web Apps', ai: 'AI/ML', arch: 'Architecture' }, searchPlaceholder: 'Search projects...', viewDetails: 'View', liveDemo: 'Demo', github: 'Code', techStack: 'Stack', highlights: 'Highlights', noResults: 'No projects found.' },
+    ailab: { title: 'AI Innovation Lab', subtitle: 'Describe your vision, and I will architect a live demo.', placeholder: 'e.g., Finance tracker app...', button: 'Start Engineering', generating: 'Architecting...', result: 'AI Result' },
+    course: { 
+      title: 'Phu Academy', 
+      subtitle: 'Elevate your coding mindset and master the AI era.', 
+      enroll: 'Enroll Now', 
+      success: 'Congratulations! You have successfully enrolled.'
+    },
+    contact: { title: 'Let\'s build', titleSuffix: 'next big thing?', labels: { name: 'Full Name', email: 'Email', message: 'Message', send: 'Send Inquiry', success: 'Thank you! I will get back to you.' }, infoTitle: 'Contact' },
+    chat: { welcome: "Hello! I'm Phú's AI. Interested in Vibe Coding or system architecture?", agent: "Phú AI v4.0", typing: "Analysing...", quickReplies: ["Vibe Coding", "Architecture", "AI Quote"] },
+    terminal: { welcome: "PhúOS v1.1.0 Admin Console. Type 'help'.", placeholder: "Cmd..." },
+    footer: { copyright: '© {year} PHU — VIBE EDITION', live: 'Live now' }
   }
 };
 
-const DEFAULT_SKILLS = [
-  { id: '1', cat: 'cat1', icon: 'Layout', items: ['React', 'Next.js', 'Tailwind', 'Framer Motion', 'TypeScript'] },
-  { id: '2', cat: 'cat2', icon: 'Cpu', items: ['Go', 'Rust', 'Node.js', 'PostgreSQL', 'Redis'] },
-  { id: '3', cat: 'cat3', icon: 'Globe', items: ['AWS', 'Docker', 'Kubernetes', 'CI/CD', 'Terraform'] },
+const DEFAULT_SKILLS: Skill[] = [
+  { id: '1', cat: 'Frontend Mastery', icon: 'Layout', items: ['React', 'Next.js', 'Tailwind', 'Framer Motion', 'TypeScript'] },
+  { id: '2', cat: 'Backend Systems', icon: 'Cpu', items: ['Go', 'Rust', 'Node.js', 'PostgreSQL', 'Redis'] },
+  { id: '3', cat: 'Cloud & DevOps', icon: 'Globe', items: ['AWS', 'Docker', 'Kubernetes', 'CI/CD', 'Terraform'] },
 ];
 
 const DEFAULT_PROJECTS: Project[] = [
-  { id: '1', title: 'Nexus Core Platform', desc: 'Kiến trúc hệ thống Micro-services cho Fintech.', tags: ['Go', 'gRPC', 'AWS'], cat: 'Architecture' },
-  { id: '2', title: 'OmniAI Engine', desc: 'Tích hợp AI dự đoán hành vi người dùng.', tags: ['Python', 'TensorFlow', 'React'], cat: 'AI/ML' },
-  { id: '3', title: 'Quantum Dashboard', desc: 'Trình quản lý dữ liệu thời gian thực.', tags: ['Next.js', 'WebSockets'], cat: 'Web App' },
+  { id: '1', title: 'Nexus Core Platform', desc: 'Kiến trúc Micro-services Fintech.', longDesc: 'Hệ thống cốt lõi xử lý hàng triệu giao dịch mỗi giây với độ trễ cực thấp.', tags: ['Go', 'gRPC', 'AWS'], cat: 'Architecture' },
+  { id: '2', title: 'OmniAI Engine', desc: 'Dự đoán hành vi người dùng.', longDesc: 'Nền tảng phân tích dữ liệu lớn sử dụng TensorFlow để dự đoán xu hướng.', tags: ['Python', 'TensorFlow', 'React'], cat: 'AI/ML' },
 ];
 
-const DEFAULT_TESTIMONIALS = [
-  { id: '1', author: 'CTO, TechVanguard', content: "Phú không chỉ là một lập trình viên giỏi, anh ấy là một đối tác chiến lược có tầm nhìn sâu sắc.", role: "Đối tác cấp cao" },
-  { id: '2', author: 'CEO, InnovateX', content: "Giải pháp kiến trúc của Phú đã giúp chúng tôi scale hệ thống lên gấp 10 lần chỉ trong 3 tháng.", role: "Khách hàng" },
+const DEFAULT_COURSES: Course[] = [
+  { id: 'vc1', name: 'Mastering Vibe Coding', level: 'Advanced', duration: '8 tuần', desc: 'Xây dựng ứng dụng cực nhanh với AI prompt engineering.' },
+  { id: 'aa1', name: 'AI System Architecture', level: 'Expert', duration: '12 tuần', desc: 'Thiết kế hệ thống phân tán tích hợp các mô hình LLM.' }
 ];
-
-const DEFAULT_SOCIALS = {
-  facebook: 'https://facebook.com',
-  youtube: 'https://youtube.com',
-  zalo: 'https://zalo.me',
-  linkedin: 'https://linkedin.com',
-  github: 'https://github.com'
-};
-
-const DEFAULT_CONTACT_INFO = {
-  phone: '090 000 0000',
-  email: 'phu@example.com',
-  address: 'Hồ Chí Minh, Việt Nam'
-};
 
 const INITIAL_DATA = {
   translations: DEFAULT_TRANSLATIONS,
   skills: DEFAULT_SKILLS,
   projects: DEFAULT_PROJECTS,
-  testimonials: DEFAULT_TESTIMONIALS,
-  socials: DEFAULT_SOCIALS,
-  contactInfo: DEFAULT_CONTACT_INFO,
-  profileImage: null,
-  bannerImage: null,
-  visitCount: 0,
+  courses: DEFAULT_COURSES,
+  contactInfo: { 
+    email: 'phu@example.com', 
+    phone: '090 000 0000', 
+    address: 'Ho Chi Minh, VN',
+    socials: {
+      facebook: '',
+      youtube: '',
+      tiktok: '',
+      zalo: '',
+      website: ''
+    } as SocialLinks
+  },
+  profileImage: null as string | null,
   inquiries: [] as Inquiry[],
-  snapshots: [] as { id: string, date: string, label: string, data: any }[]
+  chatLogs: [] as ChatLogEntry[],
+  registrations: [] as Registration[],
+  adminPassword: 'admin',
+  theme: 'indigo' as ThemeColor,
 };
 
-// --- Utilities ---
-const scrollToSection = (id: string) => {
-  const element = document.getElementById(id);
-  if (element) {
-    window.scrollTo({ top: id === 'home' ? 0 : element.offsetTop - 80, behavior: 'smooth' });
-  }
-};
-
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
-};
-
-// --- AI Demo Builder Sub-Component ---
-
-const AiDemoBuilder = ({ t, theme }: { t: any, theme: ThemeColor }) => {
-  const [prompt, setPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [demoData, setDemoData] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
-
-  const generateDemo = async () => {
-    if (!prompt.trim()) return;
-    setIsGenerating(true);
-    setDemoData(null);
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Generate a web application or landing page demo based on this prompt: "${prompt}". 
-        
-        RULES:
-        1. Keep descriptions and content blocks concise (max 200 words per block).
-        2. Ensure the JSON is complete and valid.
-        3. Return ONLY a JSON object with this exact structure:
-        {
-          "title": "Project Name",
-          "vibe": "minimalist | futuristic | corporate | playful",
-          "hero": { "title": "...", "subtitle": "...", "cta": "..." },
-          "features": [ { "icon": "zap|shield|cpu|globe", "title": "...", "desc": "..." } ],
-          "contentBlocks": [ { "type": "text-image", "title": "...", "body": "..." } ],
-          "footer": { "copyright": "..." }
-        }`,
-        config: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-          thinkingConfig: { thinkingBudget: 1024 },
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              vibe: { type: Type.STRING },
-              hero: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  subtitle: { type: Type.STRING },
-                  cta: { type: Type.STRING },
-                },
-                required: ["title", "subtitle", "cta"]
-              },
-              features: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    icon: { type: Type.STRING },
-                    title: { type: Type.STRING },
-                    desc: { type: Type.STRING },
-                  },
-                  required: ["icon", "title", "desc"]
-                }
-              },
-              contentBlocks: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    type: { type: Type.STRING },
-                    title: { type: Type.STRING },
-                    body: { type: Type.STRING },
-                  }
-                }
-              },
-              footer: {
-                type: Type.OBJECT,
-                properties: {
-                  copyright: { type: Type.STRING }
-                }
-              }
-            },
-            required: ["title", "vibe", "hero", "features"]
-          }
-        }
-      });
-
-      const rawText = response.text?.trim() || '{}';
-      try {
-        const data = JSON.parse(rawText);
-        setDemoData(data);
-      } catch (parseError) {
-        console.error("JSON Parsing Error:", parseError, "Raw text:", rawText);
-        alert("The AI generated a response that couldn't be parsed. This usually happens with very long requests. Please try a more specific or shorter prompt.");
-      }
-    } catch (error) {
-      console.error("AI Gen Error", error);
-      alert("Error generating demo. Please try again.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const getVibeStyles = (vibe: string) => {
-    switch (vibe) {
-      case 'futuristic': return 'from-indigo-900 to-black text-cyan-400';
-      case 'minimalist': return 'from-slate-50 to-white text-slate-900';
-      case 'corporate': return 'from-blue-800 to-blue-950 text-white';
-      case 'playful': return 'from-rose-400 to-amber-400 text-white';
-      default: return 'from-slate-900 to-black text-white';
-    }
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30 },
-    show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 100 } }
-  };
-
-  return (
-    <div className="space-y-12">
-      <div className="glass p-10 rounded-[3rem] border-white/5 shadow-2xl">
-        <div className="flex flex-col gap-6">
-          <textarea 
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder={t.ailab.placeholder}
-            className="w-full h-40 bg-black/40 border border-white/10 rounded-2xl px-8 py-6 outline-none focus:border-indigo-500 transition-all resize-none text-lg font-medium"
-          />
-          <button 
-            onClick={generateDemo}
-            disabled={isGenerating || !prompt.trim()}
-            className={`w-full py-6 rounded-2xl font-black flex items-center justify-center gap-3 transition-all ${isGenerating ? 'bg-slate-800 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-600 to-cyan-600 hover:scale-[1.02] shadow-[0_0_30px_rgba(99,102,241,0.4)]'}`}
-          >
-            {isGenerating ? (
-              <>
-                <RefreshCcw size={20} className="animate-spin" />
-                {t.ailab.generating}
-              </>
-            ) : (
-              <>
-                <Wand2 size={20} />
-                {t.ailab.button}
-              </>
-            )}
-          </button>
-        </div>
+// --- Helper Components ---
+const SectionHeading = ({ children, icon: Icon, subtitle, theme }: any) => (
+  <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-12 md:mb-16 text-left">
+    <div className="flex items-center gap-4 mb-4">
+      <div className={`p-3 md:p-4 rounded-2xl ${THEMES[theme as ThemeColor].bg} ${THEMES[theme as ThemeColor].text} border ${THEMES[theme as ThemeColor].border} shadow-xl`}>
+        <Icon size={window.innerWidth < 768 ? 24 : 32} />
       </div>
-
-      <AnimatePresence mode="wait">
-        {demoData && (
-          <motion.div 
-            key="demo-result"
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="space-y-6"
-          >
-            <div className="flex justify-between items-center px-4">
-              <h4 className="text-xl font-black uppercase tracking-widest text-indigo-400 flex items-center gap-3">
-                <Sparkles size={24} /> {t.ailab.result}: {demoData.title}
-              </h4>
-              <div className="flex bg-slate-900 p-1 rounded-xl border border-white/5">
-                <button 
-                  onClick={() => setViewMode('preview')}
-                  className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'preview' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
-                >
-                  Preview
-                </button>
-                <button 
-                  onClick={() => setViewMode('code')}
-                  className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'code' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
-                >
-                  Structure
-                </button>
-              </div>
-            </div>
-
-            {viewMode === 'preview' ? (
-              <div className="rounded-[3rem] overflow-hidden border border-white/10 shadow-2xl bg-white min-h-[600px] flex flex-col">
-                {/* Simulated Browser Bar */}
-                <div className="bg-slate-100 p-4 border-b border-slate-200 flex items-center gap-3">
-                  <div className="flex gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
-                  </div>
-                  <div className="flex-1 bg-white rounded-lg py-1 px-4 text-[10px] text-slate-400 font-bold border border-slate-200 truncate">
-                    https://phu.ai/lab/demo/{demoData.title.toLowerCase().replace(/\s+/g, '-')}
-                  </div>
-                </div>
-
-                {/* Actual Demo Content */}
-                <div className={`flex-1 overflow-y-auto custom-scrollbar ${demoData.vibe === 'minimalist' ? 'text-slate-900 bg-white' : 'text-white bg-slate-950'}`}>
-                  {/* Hero */}
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true }}
-                    className={`py-32 px-10 text-center bg-gradient-to-br ${getVibeStyles(demoData.vibe)}`}
-                  >
-                    <motion.h1 
-                      initial={{ opacity: 0, y: 30 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2, type: 'spring', damping: 12 }}
-                      className="text-6xl font-black mb-8 tracking-tight"
-                    >
-                      {demoData.hero.title}
-                    </motion.h1>
-                    <motion.p 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.4 }}
-                      className="text-xl opacity-80 max-w-2xl mx-auto mb-12 font-medium leading-relaxed"
-                    >
-                      {demoData.hero.subtitle}
-                    </motion.p>
-                    <motion.button 
-                      whileHover={{ scale: 1.05, boxShadow: "0 0 25px rgba(99,102,241,0.4)" }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-12 py-5 bg-white text-black font-black rounded-2xl shadow-2xl uppercase tracking-widest text-sm"
-                    >
-                      {demoData.hero.cta}
-                    </motion.button>
-                  </motion.div>
-
-                  {/* Features */}
-                  <motion.div 
-                    variants={containerVariants}
-                    initial="hidden"
-                    whileInView="show"
-                    viewport={{ once: true, margin: "-100px" }}
-                    className="py-24 px-10 grid md:grid-cols-3 gap-10"
-                  >
-                    {demoData.features.map((f: any, i: number) => (
-                      <motion.div 
-                        key={i} 
-                        variants={itemVariants}
-                        whileHover={{ y: -10, scale: 1.02 }}
-                        className={`p-10 rounded-[2.5rem] border transition-colors duration-300 ${demoData.vibe === 'minimalist' ? 'border-slate-100 bg-slate-50 hover:border-indigo-200' : 'border-white/5 bg-white/5 hover:border-indigo-500/30'}`}
-                      >
-                        <div className="mb-6 text-indigo-500">
-                          {f.icon === 'zap' ? <Zap size={32} /> : f.icon === 'shield' ? <ShieldCheck size={32} /> : f.icon === 'cpu' ? <Cpu size={32} /> : <Globe size={32} />}
-                        </div>
-                        <h3 className="text-2xl font-black mb-4 tracking-tight">{f.title}</h3>
-                        <p className="text-sm opacity-60 leading-relaxed">{f.desc}</p>
-                      </motion.div>
-                    ))}
-                  </motion.div>
-
-                  {/* Content Blocks */}
-                  {demoData.contentBlocks?.map((block: any, i: number) => (
-                    <motion.div 
-                      key={i} 
-                      initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      className={`py-24 px-10 border-t ${demoData.vibe === 'minimalist' ? 'border-slate-100' : 'border-white/5'}`}
-                    >
-                       <h2 className="text-4xl font-black mb-8 tracking-tight">{block.title}</h2>
-                       <p className="text-lg opacity-70 leading-relaxed max-w-4xl">{block.body}</p>
-                    </motion.div>
-                  ))}
-
-                  {/* Footer */}
-                  <footer className={`py-16 px-10 text-center border-t ${demoData.vibe === 'minimalist' ? 'border-slate-100' : 'border-white/5'}`}>
-                    <p className="text-xs font-black uppercase tracking-[0.4em] opacity-40">{demoData.footer?.copyright || `© 2024 ${demoData.title}`}</p>
-                  </footer>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-black rounded-[2.5rem] p-8 font-mono text-sm border border-white/10 overflow-hidden relative group">
-                <button 
-                  onClick={() => { navigator.clipboard.writeText(JSON.stringify(demoData, null, 2)); alert('Copied to clipboard!'); }}
-                  className="absolute top-6 right-6 p-3 bg-white/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-white"
-                >
-                  <Copy size={16} />
-                </button>
-                <pre className="text-green-400 custom-scrollbar overflow-auto max-h-[500px]">
-                  {JSON.stringify(demoData, null, 2)}
-                </pre>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <h2 className="text-3xl md:text-5xl font-black tracking-tight">{children}</h2>
     </div>
-  );
-};
-
-// --- Admin Components ---
-
-const AdminDashboard = ({ isOpen, onClose, onSave, currentData, theme }: { isOpen: boolean, onClose: () => void, onSave: (data: any) => void, currentData: any, theme: ThemeColor }) => {
-  const [activeTab, setActiveTab] = useState('General');
-  const [data, setData] = useState(currentData);
-  const [loginPass, setLoginPass] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const profileInputRef = useRef<HTMLInputElement>(null);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
-  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) setData(currentData);
-  }, [isOpen, currentData]);
-
-  const handleAuth = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginPass === 'admin') setIsAuthenticated(true);
-    else alert('Mật khẩu sai!');
-  };
-
-  const handleGeneralChange = (lang: Language, section: string, key: string, val: string) => {
-    const newData = { ...data };
-    if (!newData.translations[lang][section]) (newData.translations[lang] as any)[section] = {};
-    (newData.translations[lang][section] as any)[key] = val;
-    setData(newData);
-  };
-
-  const handleSocialChange = (key: string, val: string) => {
-    setData({ ...data, socials: { ...data.socials, [key]: val } });
-  };
-
-  const handleContactInfoChange = (key: string, val: string) => {
-    setData({ ...data, contactInfo: { ...data.contactInfo, [key]: val } });
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, projectId: string) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const base64 = await fileToBase64(file);
-      const newProjects = data.projects.map((p: Project) => 
-        p.id === projectId ? { ...p, image: base64 } : p
-      );
-      setData({ ...data, projects: newProjects });
-    }
-  };
-
-  const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const base64 = await fileToBase64(file);
-      setData({ ...data, profileImage: base64 });
-    }
-  };
-
-  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const base64 = await fileToBase64(file);
-      setData({ ...data, bannerImage: base64 });
-    }
-  };
-
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `phu_portfolio_backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const text = await file.text();
-      try {
-        const imported = JSON.parse(text);
-        setData(imported);
-        alert('Data imported successfully. Don\'t forget to save!');
-      } catch (err) {
-        alert('Invalid backup file.');
-      }
-    }
-  };
-
-  const createSnapshot = () => {
-    const label = prompt('Tên bản sao lưu (Snapshot):', `Snapshot ${new Date().toLocaleString()}`);
-    if (label) {
-      const newSnapshot = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        label,
-        data: JSON.parse(JSON.stringify(data))
-      };
-      const newData = { ...data, snapshots: [newSnapshot, ...(data.snapshots || [])].slice(0, 10) };
-      setData(newData);
-      alert('Đã tạo bản sao lưu thành công!');
-    }
-  };
-
-  const restoreSnapshot = (snapshot: any) => {
-    if (confirm(`Khôi phục về bản sao lưu "${snapshot.label}"?`)) {
-      const restoredData = { ...snapshot.data, snapshots: data.snapshots };
-      setData(restoredData);
-    }
-  };
-
-  const deleteInquiry = (id: string) => {
-    if (confirm('Xóa yêu cầu này?')) {
-      const newInquiries = data.inquiries.filter((inq: Inquiry) => inq.id !== id);
-      setData({ ...data, inquiries: newInquiries });
-    }
-  };
-
-  const clearAllInquiries = () => {
-    if (confirm('Xóa tất cả yêu cầu liên hệ? Thao tác này không thể hoàn tác.')) {
-      setData({ ...data, inquiries: [] });
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center p-4">
-      {!isAuthenticated ? (
-        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-slate-900 p-10 rounded-[2.5rem] border border-white/10 w-full max-w-md text-center">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-6">
-            <Lock size={32} />
-          </div>
-          <h2 className="text-2xl font-black mb-6">Admin Access</h2>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <input 
-              type="password" 
-              placeholder="Nhập mật khẩu (admin)" 
-              className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-4 outline-none focus:border-indigo-500"
-              value={loginPass}
-              onChange={e => setLoginPass(e.target.value)}
-              autoFocus
-            />
-            <button className="w-full py-4 bg-indigo-600 rounded-xl font-bold hover:bg-indigo-700 transition-all">Đăng nhập</button>
-            <button type="button" onClick={onClose} className="text-slate-500 text-sm font-bold uppercase tracking-widest mt-2">Hủy bỏ</button>
-          </form>
-        </motion.div>
-      ) : (
-        <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="w-full max-w-6xl h-[85vh] bg-slate-900 rounded-[3rem] border border-white/10 flex flex-col overflow-hidden shadow-2xl">
-          <div className="p-8 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
-            <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-xl ${THEMES[theme].bg} ${THEMES[theme].text}`}><Settings size={24} /></div>
-              <div>
-                <h2 className="text-xl font-black">Digital CMS Pro</h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-green-400 font-bold uppercase tracking-widest bg-green-400/10 px-2 py-0.5 rounded">IndexedDB Active</span>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Database Version: {DB_VERSION}</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button 
-                onClick={async () => { 
-                  setIsSaving(true);
-                  await onSave(data); 
-                  setIsSaving(false);
-                  onClose(); 
-                }} 
-                disabled={isSaving}
-                className={`flex items-center gap-2 px-6 py-3 bg-indigo-600 rounded-xl font-bold text-sm transition-all ${isSaving ? 'opacity-50' : 'hover:bg-indigo-700'}`}
-              >
-                {isSaving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />} 
-                {isSaving ? 'Đang lưu...' : 'Lưu & Đồng bộ'}
-              </button>
-              <button onClick={onClose} className="p-3 bg-white/5 rounded-xl hover:bg-white/10"><X size={20} /></button>
-            </div>
-          </div>
-
-          <div className="flex flex-1 overflow-hidden">
-            <div className="w-64 border-r border-white/5 p-6 space-y-2">
-              {[
-                { id: 'General', icon: Layout },
-                { id: 'Inquiries', icon: Inbox, count: data.inquiries?.length || 0 },
-                { id: 'Visuals', icon: ImageLucide },
-                { id: 'Socials', icon: Globe },
-                { id: 'Skills', icon: Cpu },
-                { id: 'Projects', icon: Briefcase },
-                { id: 'Testimonials', icon: Quote },
-                { id: 'Database', icon: Database },
-              ].map(tab => (
-                <button 
-                  key={tab.id} 
-                  onClick={() => setActiveTab(tab.id)} 
-                  className={`w-full flex items-center justify-between text-left px-5 py-3.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <tab.icon size={18} />
-                    {tab.id}
-                  </div>
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${activeTab === tab.id ? 'bg-white text-indigo-600' : 'bg-indigo-500/20 text-indigo-400'}`}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-              <div className="pt-10">
-                <button 
-                  onClick={() => { if(confirm('Reset toàn bộ dữ liệu về mặc định?')) { setData({ ...INITIAL_DATA, snapshots: data.snapshots }); } }}
-                  className="w-full text-left px-5 py-3.5 rounded-xl text-sm font-bold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2"
-                >
-                  <RefreshCcw size={16} /> Reset Default
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10">
-              {activeTab === 'General' && (
-                <>
-                  <div className="p-8 bg-black/30 rounded-3xl border border-white/5 space-y-4">
-                    <div className="flex items-center gap-3 text-indigo-400 mb-2">
-                      <BarChart3 size={24} />
-                      <h3 className="text-sm font-black uppercase tracking-widest">Site Analytics</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Tổng lượt truy cập</label>
-                        <input 
-                          type="number"
-                          className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-4 text-xl font-black outline-none focus:border-indigo-500"
-                          value={data.visitCount}
-                          onChange={e => setData({...data, visitCount: parseInt(e.target.value) || 0})}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <SectionSet title="Hero (VI)" lang="vi" section="hero" fields={['badge', 'titlePrefix', 'titleSuffix', 'bio']} data={data} onChange={handleGeneralChange} />
-                  <SectionSet title="Hero (EN)" lang="en" section="hero" fields={['badge', 'titlePrefix', 'titleSuffix', 'bio']} data={data} onChange={handleGeneralChange} />
-                  <SectionSet title="Contact Info" fields={['phone', 'email', 'address']} data={{ socials: data.contactInfo }} section="socials" onChange={(lang: any, sec: any, field: string, val: string) => handleContactInfoChange(field, val)} />
-                </>
-              )}
-
-              {activeTab === 'Inquiries' && (
-                <div className="space-y-6">
-                   <div className="flex justify-between items-center mb-8">
-                     <div>
-                       <h3 className="text-xl font-black uppercase tracking-widest text-indigo-400">Yêu cầu liên hệ</h3>
-                       <p className="text-sm text-slate-500 mt-1">Lưu trữ từ Form Liên Hệ trên website.</p>
-                     </div>
-                     {data.inquiries.length > 0 && (
-                       <button onClick={clearAllInquiries} className="px-4 py-2 bg-rose-500/10 text-rose-500 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Xóa tất cả</button>
-                     )}
-                   </div>
-
-                   <div className="space-y-4">
-                     {data.inquiries && data.inquiries.length > 0 ? (
-                       [...data.inquiries].reverse().map((inq: Inquiry) => (
-                         <div key={inq.id} className="p-8 bg-black/30 rounded-[2rem] border border-white/5 group hover:border-indigo-500/20 transition-all">
-                           <div className="flex justify-between items-start mb-6">
-                             <div className="flex items-center gap-4">
-                               <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-black text-lg">
-                                 {inq.name.charAt(0).toUpperCase()}
-                               </div>
-                               <div>
-                                 <h4 className="font-black text-xl">{inq.name}</h4>
-                                 <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
-                                   <Clock size={12} /> {new Date(inq.timestamp).toLocaleString()}
-                                 </div>
-                               </div>
-                             </div>
-                             <button onClick={() => deleteInquiry(inq.id)} className="p-2 text-slate-600 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"><Trash2 size={18} /></button>
-                           </div>
-                           
-                           <div className="grid md:grid-cols-3 gap-6 mb-6">
-                             <div className="space-y-1">
-                               <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest block">Email</span>
-                               <div className="text-sm text-indigo-300">{inq.email}</div>
-                             </div>
-                             <div className="space-y-1">
-                               <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest block">Số điện thoại</span>
-                               <div className="text-sm">{inq.phone || 'N/A'}</div>
-                             </div>
-                           </div>
-
-                           <div className="bg-black/40 p-6 rounded-2xl border border-white/5">
-                             <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest block mb-2">Tin nhắn</span>
-                             <p className="text-slate-300 leading-relaxed text-sm italic">"{inq.message}"</p>
-                           </div>
-                         </div>
-                       ))
-                     ) : (
-                       <div className="py-24 text-center border-2 border-dashed border-white/5 rounded-[3rem] text-slate-600">
-                         <Inbox size={48} className="mx-auto mb-4 opacity-20" />
-                         <p className="font-bold uppercase tracking-widest">Chưa có yêu cầu liên hệ nào.</p>
-                       </div>
-                     )}
-                   </div>
-                </div>
-              )}
-
-              {activeTab === 'Visuals' && (
-                <div className="space-y-12">
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400">Banner & Ảnh đại diện</h3>
-                    
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Ảnh Banner Hero (Khuyên dùng 1920x1080)</label>
-                      <div 
-                        onClick={() => bannerInputRef.current?.click()}
-                        className="group relative aspect-video w-full rounded-3xl bg-slate-900 border-2 border-dashed border-white/10 hover:border-indigo-500/50 transition-all cursor-pointer overflow-hidden flex flex-col items-center justify-center gap-3"
-                      >
-                        {data.bannerImage ? (
-                          <>
-                            <img src={data.bannerImage} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105" alt="Banner Preview" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <div className="flex flex-col items-center text-white">
-                                <Upload size={32} />
-                                <span className="text-sm font-bold mt-2">Thay đổi Banner</span>
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex flex-col items-center text-slate-500">
-                            <ImageLucide size={48} />
-                            <span className="text-xs font-bold mt-2">Tải ảnh Banner</span>
-                          </div>
-                        )}
-                      </div>
-                      <input type="file" ref={bannerInputRef} className="hidden" accept="image/*" onChange={handleBannerUpload} />
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-10 pt-6">
-                      <div className="space-y-4">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Ảnh đại diện (Avatar)</label>
-                        <div 
-                          onClick={() => profileInputRef.current?.click()}
-                          className="group relative aspect-square w-48 rounded-3xl bg-slate-900 border-2 border-dashed border-white/10 hover:border-indigo-500/50 transition-all cursor-pointer overflow-hidden flex flex-col items-center justify-center gap-3"
-                        >
-                          {data.profileImage ? (
-                            <>
-                              <img src={data.profileImage} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-110" alt="Profile Preview" />
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <Upload size={24} className="text-white" />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex flex-col items-center text-slate-500">
-                              <ImageIcon size={32} />
-                              <span className="text-xs font-bold mt-2">Tải Avatar</span>
-                            </div>
-                          )}
-                        </div>
-                        <input type="file" ref={profileInputRef} className="hidden" accept="image/*" onChange={handleProfileUpload} />
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <SectionSet title="Thông tin bổ sung (VI)" lang="vi" section="about" fields={['title', 'expTitle', 'expDesc']} data={data} onChange={handleGeneralChange} />
-                        <SectionSet title="About Info (EN)" lang="en" section="about" fields={['title', 'expTitle', 'expDesc']} data={data} onChange={handleGeneralChange} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Socials' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400">Liên kết mạng xã hội</h3>
-                  <div className="grid grid-cols-1 gap-4">
-                    {Object.keys(data.socials).map(key => (
-                      <div key={key} className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter ml-2">{key}</label>
-                        <input 
-                          className="w-full bg-black/50 border border-white/5 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                          value={data.socials[key as keyof typeof data.socials]}
-                          onChange={e => handleSocialChange(key, e.target.value)}
-                          placeholder={`Link ${key}...`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Skills' && (
-                <div className="space-y-6">
-                  {data.skills.map((skill: any, idx: number) => (
-                    <div key={skill.id} className="p-6 bg-black/30 rounded-2xl border border-white/5">
-                      <div className="flex justify-between mb-4">
-                        <span className="font-bold text-indigo-400 uppercase text-xs tracking-widest">{skill.cat}</span>
-                        <button onClick={() => {
-                          const newSkills = [...data.skills];
-                          newSkills.splice(idx, 1);
-                          setData({...data, skills: newSkills});
-                        }} className="text-rose-500"><Trash2 size={16} /></button>
-                      </div>
-                      <input 
-                        className="w-full bg-transparent border-none text-xl font-bold outline-none mb-4" 
-                        value={skill.items.join(', ')} 
-                        onChange={e => {
-                          const newSkills = [...data.skills];
-                          newSkills[idx].items = e.target.value.split(',').map(s => s.trim());
-                          setData({...data, skills: newSkills});
-                        }}
-                      />
-                    </div>
-                  ))}
-                  <button onClick={() => setData({...data, skills: [...data.skills, { id: Date.now().toString(), cat: 'New', items: ['Skill 1'] }]})} className="w-full py-4 border-2 border-dashed border-white/10 rounded-2xl text-slate-500 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2"><Plus size={20} /> Thêm Kỹ năng</button>
-                </div>
-              )}
-
-              {activeTab === 'Projects' && (
-                <div className="space-y-8">
-                   {data.projects.map((proj: Project, idx: number) => (
-                    <div key={proj.id} className="p-8 bg-black/30 rounded-3xl border border-white/5 space-y-6">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Tiêu đề dự án</label>
-                          <input className="w-full bg-transparent text-2xl font-black outline-none border-b border-transparent focus:border-indigo-500 pb-2" value={proj.title} onChange={e => {
-                            const newProjects = [...data.projects];
-                            newProjects[idx].title = e.target.value;
-                            setData({...data, projects: newProjects});
-                          }} />
-                        </div>
-                        <button onClick={() => {
-                          const newProjects = [...data.projects];
-                          newProjects.splice(idx, 1);
-                          setData({...data, projects: newProjects});
-                        }} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"><Trash2 size={18} /></button>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Mô tả chi tiết</label>
-                            <textarea className="w-full h-32 bg-slate-900/50 border border-white/10 rounded-xl p-4 text-sm text-slate-300 outline-none focus:border-indigo-500 transition-all resize-none" value={proj.desc} onChange={e => {
-                              const newProjects = [...data.projects];
-                              newProjects[idx].desc = e.target.value;
-                              setData({...data, projects: newProjects});
-                            }} />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Tags (phân cách bởi dấu phẩy)</label>
-                            <input className="w-full bg-slate-900/50 border border-white/10 rounded-xl p-4 text-sm text-slate-300 outline-none focus:border-indigo-500 transition-all" value={proj.tags.join(', ')} onChange={e => {
-                              const newProjects = [...data.projects];
-                              newProjects[idx].tags = e.target.value.split(',').map(s => s.trim());
-                              setData({...data, projects: newProjects});
-                            }} />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Hình ảnh đại diện (IndexedDB High-Cap)</label>
-                          <div 
-                            onClick={() => {
-                              setEditingProjectId(proj.id);
-                              fileInputRef.current?.click();
-                            }}
-                            className="group relative aspect-video rounded-2xl bg-slate-900 border-2 border-dashed border-white/10 hover:border-indigo-500/50 transition-all cursor-pointer overflow-hidden flex flex-col items-center justify-center gap-3"
-                          >
-                            {proj.image ? (
-                              <>
-                                <img src={proj.image} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-110" alt={proj.title} />
-                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                  <div className="flex flex-col items-center text-white">
-                                    <Upload size={24} />
-                                    <span className="text-xs font-bold mt-2">Thay đổi ảnh</span>
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-                                  <ImageIcon size={24} />
-                                </div>
-                                <span className="text-xs font-bold text-slate-400">Tải ảnh lên (Phá bỏ giới hạn 5MB)</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={e => editingProjectId && handleImageUpload(e, editingProjectId)} 
-                  />
-                  <button onClick={() => setData({...data, projects: [...data.projects, { id: Date.now().toString(), title: 'Dự án mới', desc: 'Mô tả dự án...', tags: [], cat: 'Web App' }]})} className="w-full py-8 border-2 border-dashed border-white/10 rounded-3xl text-slate-500 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2 font-bold uppercase tracking-widest"><Plus size={24} /> Thêm Dự án Mới</button>
-                </div>
-              )}
-
-              {activeTab === 'Database' && (
-                <div className="space-y-12">
-                  <div className="grid md:grid-cols-2 gap-8">
-                    <div className="p-8 bg-indigo-500/10 rounded-[2rem] border border-indigo-500/20 space-y-4">
-                      <div className="flex items-center gap-4 text-indigo-400 mb-2">
-                        <Download size={32} />
-                        <h4 className="text-lg font-black uppercase tracking-widest">Backup & Export</h4>
-                      </div>
-                      <p className="text-sm text-slate-400">Tải xuống toàn bộ dữ liệu trang web (bao gồm cả ảnh chất lượng cao) thành một tệp JSON duy nhất để lưu trữ bên ngoài.</p>
-                      <button onClick={handleExport} className="w-full py-4 bg-indigo-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all">
-                        Xuất dữ liệu (.json)
-                      </button>
-                    </div>
-
-                    <div className="p-8 bg-emerald-500/10 rounded-[2rem] border border-emerald-500/20 space-y-4">
-                      <div className="flex items-center gap-4 text-emerald-400 mb-2">
-                        <Upload size={32} />
-                        <h4 className="text-lg font-black uppercase tracking-widest">Import Data</h4>
-                      </div>
-                      <p className="text-sm text-slate-400">Khôi phục trang web từ một tệp sao lưu đã lưu trước đó. Lưu ý: Thao tác này sẽ ghi đè dữ liệu hiện tại.</p>
-                      <label className="w-full py-4 bg-emerald-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all cursor-pointer">
-                        <input type="file" className="hidden" accept=".json" onChange={handleImport} />
-                        Nhập dữ liệu
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <h4 className="text-xl font-black uppercase tracking-widest text-indigo-400 flex items-center gap-3">
-                          <History size={24} /> Snapshots History
-                        </h4>
-                        <p className="text-sm text-slate-500 font-bold uppercase tracking-widest mt-1">Lưu trữ tối đa 10 phiên bản gần nhất trong trình duyệt</p>
-                      </div>
-                      <button onClick={createSnapshot} className="px-6 py-3 bg-white/5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/10 transition-all">
-                        <Plus size={18} /> Tạo Snapshot
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      {data.snapshots && data.snapshots.length > 0 ? (
-                        data.snapshots.map((snap: any) => (
-                          <div key={snap.id} className="flex items-center justify-between p-6 bg-black/30 rounded-2xl border border-white/5 group hover:border-indigo-500/30 transition-all">
-                            <div className="flex items-center gap-5">
-                              <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-slate-500">
-                                <HardDrive size={24} />
-                              </div>
-                              <div>
-                                <div className="font-bold text-lg">{snap.label}</div>
-                                <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">{new Date(snap.date).toLocaleString()}</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => restoreSnapshot(snap)} className="px-5 py-2.5 bg-indigo-600/10 text-indigo-400 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">Restore</button>
-                              <button onClick={() => {
-                                const newSnaps = data.snapshots.filter((s: any) => s.id !== snap.id);
-                                setData({ ...data, snapshots: newSnaps });
-                              }} className="p-2.5 text-slate-600 hover:text-rose-500 transition-all"><Trash2 size={18} /></button>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2rem] text-slate-600">
-                          Chưa có bản sao lưu nào được tạo.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Testimonials' && (
-                <div className="space-y-6">
-                  {data.testimonials.map((testi: any, idx: number) => (
-                    <div key={testi.id} className="p-6 bg-black/30 rounded-2xl border border-white/5 space-y-4">
-                      <div className="flex justify-between">
-                        <input className="bg-transparent font-bold outline-none" value={testi.author} onChange={e => {
-                          const newTesti = [...data.testimonials];
-                          newTesti[idx].author = e.target.value;
-                          setData({...data, testimonials: newTesti});
-                        }} />
-                        <button onClick={() => {
-                          const newTesti = [...data.testimonials];
-                          newTesti.splice(idx, 1);
-                          setData({...data, testimonials: newTesti});
-                        }} className="text-rose-500"><Trash2 size={16} /></button>
-                      </div>
-                      <textarea className="w-full bg-transparent border border-white/5 rounded-lg p-3 text-sm text-slate-400 outline-none italic" value={testi.content} onChange={e => {
-                        const newTesti = [...data.testimonials];
-                        newTesti[idx].content = e.target.value;
-                        setData({...data, testimonials: newTesti});
-                      }} />
-                    </div>
-                  ))}
-                  <button onClick={() => setData({...data, testimonials: [...data.testimonials, { id: Date.now().toString(), author: 'Tên đối tác', content: 'Nội dung đánh giá...', role: 'CEO' }]})} className="w-full py-4 border-2 border-dashed border-white/10 rounded-2xl text-slate-500 flex items-center justify-center gap-2"><Plus size={20} /> Thêm Đánh giá</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </motion.div>
-  );
-};
-
-const SectionSet = ({ title, lang, section, fields, data, onChange }: any) => (
-  <div className="space-y-4">
-    <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400">{title}</h3>
-    <div className="grid grid-cols-1 gap-4">
-      {fields.map((f: string) => (
-        <div key={f} className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter ml-2">{f}</label>
-          <input 
-            className="w-full bg-black/50 border border-white/5 rounded-xl px-4 py-3 text-sm outline-none focus:border-white/20"
-            value={lang ? data.translations[lang][section]?.[f] || '' : (data.socials?.[f] || data.contactInfo?.[f])}
-            onChange={e => onChange(lang, section, f, e.target.value)}
-          />
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-// --- Sub-Components ---
-
-const ReadingProgress = () => {
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
-  return <motion.div className="fixed top-0 left-0 right-0 h-1.5 bg-indigo-500 origin-left z-[200] shadow-[0_0_15px_rgba(99,102,241,0.5)]" style={{ scaleX }} />;
-};
-
-const SectionHeading = ({ children, icon: Icon, subtitle, theme }: { children: any, icon: any, subtitle?: string, theme: ThemeColor }) => (
-  <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-16">
-    <div className="flex items-center gap-4 mb-3">
-      <div className={`p-3 rounded-2xl ${THEMES[theme].bg} ${THEMES[theme].text} border ${THEMES[theme].border} shadow-xl`}>
-        <Icon size={28} />
-      </div>
-      <h2 className="text-4xl font-black tracking-tight">{children}</h2>
-    </div>
-    {subtitle && <p className="text-slate-400 max-w-2xl text-lg leading-relaxed">{subtitle}</p>}
+    {subtitle && <p className="text-slate-400 max-w-2xl text-base md:text-lg leading-relaxed font-medium">{subtitle}</p>}
   </motion.div>
 );
 
-const TerminalOverlay = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => void, t: any }) => {
-  const [history, setHistory] = useState<{cmd: string, res: string}[]>([]);
-  const [input, setInput] = useState('');
-  const endRef = useRef<HTMLDivElement>(null);
+const AnimatedCounter = ({ value, duration = 2 }: { value: number, duration?: number }) => {
+  const count = useMotionValue(0);
+  const rounded = useMotionTransform(count, (latest) => Math.round(latest));
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [history]);
+  useEffect(() => {
+    const controls = animate(count, value, { duration });
+    return controls.stop;
+  }, [value]);
 
-  const handleCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    
-    let res = "Command not found. Type 'help' for list.";
-    const cmd = input.toLowerCase().trim();
-
-    if (cmd === 'help') res = "Available: whois, skills, projects, contact, clear, exit, dbstats";
-    else if (cmd === 'whois') res = "Đồng Minh Phú - Senior Software Engineer & Architect.";
-    else if (cmd === 'skills') res = "Frontend: React, Next.js. Backend: Go, Rust. Infra: AWS, K8s.";
-    else if (cmd === 'dbstats') res = `DB: IndexedDB, Model: Gemini 3 Flash, Store: siteData, Mode: Premium Persistence.`;
-    else if (cmd === 'clear') { setHistory([]); setInput(''); return; }
-    else if (cmd === 'exit') { onClose(); return; }
-
-    setHistory([...history, { cmd: input, res }]);
-    setInput('');
-  };
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 md:p-10">
-          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="w-full max-w-4xl aspect-video bg-black rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden font-mono text-sm">
-            <div className="p-4 bg-slate-900 border-b border-white/5 flex justify-between items-center">
-              <div className="flex gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-              </div>
-              <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">PhúOS Terminal v2.1 (IndexedDB Edition)</span>
-              <button onClick={onClose}><X size={18} className="text-slate-500 hover:text-white" /></button>
-            </div>
-            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar text-green-400 space-y-4">
-              <p className="text-slate-500">{t.terminal.welcome}</p>
-              {history.map((h, i) => (
-                <div key={i}>
-                  <p><span className="text-indigo-400">guest@phu:~$</span> {h.cmd}</p>
-                  <p className="text-slate-300 ml-4">{h.res}</p>
-                </div>
-              ))}
-              <div ref={endRef} />
-              <form onSubmit={handleCommand} className="flex gap-2 items-center">
-                <span className="text-indigo-400">guest@phu:~$</span>
-                <input autoFocus value={input} onChange={e => setInput(e.target.value)} className="bg-transparent border-none outline-none flex-1 text-green-400" />
-              </form>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  return <motion.span>{rounded}</motion.span>;
 };
 
-// --- Main Components ---
-
+// --- Main App ---
 const App = () => {
   const [lang, setLang] = useState<Language>('vi');
-  const [theme, setTheme] = useState<ThemeColor>('indigo');
-  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isFormSubmitted, setIsFormSubmitted] = useState(false);
-  const [showBackToTop, setShowBackToTop] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-
   const [siteData, setSiteData] = useState<any>(INITIAL_DATA);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [visitCount, setVisitCount] = useState(0);
+
+  const theme = siteData.theme || 'indigo';
+  const tc = THEME_COLORS[theme];
+
+  const persistSiteData = async (newData: any) => {
+    setSiteData(newData);
+    await saveToDB('portfolio_data', newData);
+  };
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const saved = await getFromDB('portfolio_data');
-        let currentData = INITIAL_DATA;
         if (saved) {
-          // Merge with INITIAL_DATA to ensure new fields like inquiries exist
-          currentData = { ...INITIAL_DATA, ...saved };
-        } else {
-          const legacy = localStorage.getItem('phu_portfolio_data_v3');
-          if (legacy) {
-            const parsed = JSON.parse(legacy);
-            currentData = { ...INITIAL_DATA, ...parsed };
+          // Deep merge for critical nested structures like contactInfo
+          const merged = { ...INITIAL_DATA, ...saved };
+          if (saved.contactInfo) {
+            merged.contactInfo = {
+              ...INITIAL_DATA.contactInfo,
+              ...saved.contactInfo,
+              socials: {
+                ...INITIAL_DATA.contactInfo.socials,
+                ...(saved.contactInfo.socials || {})
+              }
+            };
           }
+          setSiteData(merged);
+        } else {
+          setSiteData(INITIAL_DATA);
         }
+
+        const savedVisits = await getFromDB('visit_count') || 1240;
+        const sessionKey = 'phu_visited_session';
+        let currentVisits = savedVisits;
         
-        const updatedData = { ...currentData, visitCount: (currentData.visitCount || 0) + 1 };
-        setSiteData(updatedData);
-        await saveToDB('portfolio_data', updatedData);
-        
+        if (!sessionStorage.getItem(sessionKey)) {
+          currentVisits += 1;
+          await saveToDB('visit_count', currentVisits);
+          sessionStorage.setItem(sessionKey, 'true');
+        }
+        setVisitCount(currentVisits);
+
+        const adminSession = localStorage.getItem('phu_admin_token');
+        if (adminSession === 'phu_authorized_2025') {
+          setIsAdmin(true);
+        }
+
+        setTimeout(() => setIsLoaded(true), 1200);
       } catch (e) {
-        console.error("DB Load Error", e);
-      } finally {
         setIsLoaded(true);
       }
     };
@@ -1269,566 +398,1661 @@ const App = () => {
 
   const t = siteData.translations[lang];
 
-  const handleSaveData = async (newData: any) => {
-    setSiteData(newData);
-    await saveToDB('portfolio_data', newData);
-    localStorage.setItem('phu_portfolio_data_v3', JSON.stringify(newData));
+  const handleLogout = () => {
+    setIsAdmin(false);
+    localStorage.removeItem('phu_admin_token');
+    setIsTerminalOpen(false);
   };
 
-  useEffect(() => {
-    const handleShortcut = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'A') {
-        setIsAdminOpen(true);
-      }
-    };
-    
-    const handleScroll = () => {
-      setShowBackToTop(window.scrollY > 400);
-    };
-
-    window.addEventListener('keydown', handleShortcut);
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('keydown', handleShortcut);
-      window.removeEventListener('scroll', handleScroll);
-    };
+  const scrollToSection = useCallback((id: string) => {
+    setIsMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      window.scrollTo({ 
+        top: id === 'home' ? 0 : element.offsetTop - 80, 
+        behavior: 'smooth' 
+      });
+    }
   }, []);
 
   const handleContactSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
     const newInquiry: Inquiry = {
-      id: Date.now().toString(),
+      id: Math.random().toString(36).substr(2, 9),
       name: formData.get('name') as string,
       email: formData.get('email') as string,
-      phone: formData.get('phone') as string,
       message: formData.get('message') as string,
       timestamp: new Date().toISOString()
     };
-
-    // Auto-save to inquiries array
-    const updatedData = {
-      ...siteData,
-      inquiries: [newInquiry, ...(siteData.inquiries || [])]
-    };
-
-    setSiteData(updatedData);
-    await saveToDB('portfolio_data', updatedData);
     
-    setIsFormSubmitted(true);
-    e.currentTarget.reset();
-    setTimeout(() => setIsFormSubmitted(false), 5000);
+    const updatedInquiries = [...(siteData.inquiries || []), newInquiry];
+    await persistSiteData({ ...siteData, inquiries: updatedInquiries });
+    alert(t.contact.labels.success);
+    (e.target as HTMLFormElement).reset();
   };
 
-  const SocialLinks = ({ className = "" }) => (
-    <div className={`flex gap-4 ${className}`}>
-      {siteData.socials.facebook && <a href={siteData.socials.facebook} target="_blank" className="p-3 bg-white/5 rounded-xl hover:bg-indigo-600 transition-all text-slate-400 hover:text-white" rel="noreferrer"><Facebook size={20} /></a>}
-      {siteData.socials.youtube && <a href={siteData.socials.youtube} target="_blank" className="p-3 bg-white/5 rounded-xl hover:bg-rose-600 transition-all text-slate-400 hover:text-white" rel="noreferrer"><Youtube size={20} /></a>}
-      {siteData.socials.zalo && <a href={siteData.socials.zalo} target="_blank" className="p-3 bg-white/5 rounded-xl hover:bg-blue-500 transition-all text-slate-400 hover:text-white" rel="noreferrer"><MessageCircle size={20} /></a>}
-      {siteData.socials.linkedin && <a href={siteData.socials.linkedin} target="_blank" className="p-3 bg-white/5 rounded-xl hover:bg-indigo-500 transition-all text-slate-400 hover:text-white" rel="noreferrer"><Linkedin size={20} /></a>}
-      {siteData.socials.github && <a href={siteData.socials.github} target="_blank" className="p-3 bg-white/5 rounded-xl hover:bg-slate-700 transition-all text-slate-400 hover:text-white" rel="noreferrer"><Github size={20} /></a>}
+  if (!isLoaded) return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black text-slate-800 text-3xl md:text-5xl animate-pulse uppercase tracking-widest px-6 text-center">
+      PHU OS v1.2 INITIALIZING...
     </div>
   );
 
-  if (!isLoaded) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black text-slate-800 text-4xl animate-pulse">PHÚOS DB BOOTING...</div>;
-
   return (
-    <div className={`min-h-screen bg-[#020617] text-slate-200 selection:bg-indigo-500 selection:text-white`}>
-      <ReadingProgress />
-      <TerminalOverlay isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} t={t} />
-      <AdminDashboard 
-        isOpen={isAdminOpen} 
-        onClose={() => setIsAdminOpen(false)} 
-        onSave={handleSaveData} 
-        currentData={siteData} 
-        theme={theme}
-      />
+    <div className={`min-h-screen bg-[#020617] text-slate-200 selection:bg-${tc}-500 selection:text-white overflow-x-hidden`}>
+      <ReadingProgress theme={theme} />
       
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-[100] py-6 glass">
-        <div className="container mx-auto px-6 flex justify-between items-center">
-          <button onClick={() => scrollToSection('home')} className="text-2xl font-black tracking-tighter text-gradient">PHÚ.</button>
+      <nav className="fixed top-0 left-0 right-0 z-[100] py-4 md:py-6 glass px-6">
+        <div className="container mx-auto flex justify-between items-center">
+          <button onClick={() => scrollToSection('home')} className="text-xl md:text-2xl font-black tracking-tighter text-gradient">ĐỒNG MINH PHÚ.AI</button>
           
-          <div className="hidden md:flex items-center gap-8">
-            {['Home', 'About', 'Skills', 'Lab', 'Projects', 'Contact'].map(item => (
-              <button key={item} onClick={() => scrollToSection(item.toLowerCase())} className="text-sm font-bold text-slate-400 hover:text-white transition-all uppercase tracking-widest">
-                {t.nav[item.toLowerCase() as keyof typeof t.nav]}
+          <div className="hidden lg:flex items-center gap-6">
+            {Object.keys(t.nav).map(key => (
+              <button key={key} onClick={() => scrollToSection(key)} className={`text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-[0.2em]`}>
+                {t.nav[key as keyof typeof t.nav]}
               </button>
             ))}
+            <div className="h-6 w-px bg-white/10 mx-2" />
+            <button onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} className={`text-[10px] font-black text-${tc}-400 border border-${tc}-500/30 px-3 py-1.5 rounded-lg hover:bg-${tc}-400/10 transition-colors uppercase`}>{lang}</button>
             
-            <div className="flex gap-2 p-1 bg-slate-900 rounded-full border border-white/5">
-              {Object.keys(THEMES).map(color => (
-                <button 
-                  key={color} 
-                  onClick={() => setTheme(color as ThemeColor)} 
-                  className={`w-6 h-6 rounded-full ${THEMES[color as ThemeColor].primary} transition-transform ${theme === color ? 'scale-125 ring-2 ring-white' : 'scale-90 hover:scale-110'}`} 
-                />
-              ))}
-            </div>
+            {isAdmin ? (
+              <div className="flex items-center gap-3">
+                <button onClick={() => setIsTerminalOpen(true)} className={`p-2.5 bg-slate-900 border border-${tc}-500/30 rounded-xl text-${tc}-400 hover:bg-${tc}-500/10 transition-all flex items-center gap-2`}>
+                  <Settings size={18} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Quản trị</span>
+                </button>
+                <button onClick={handleLogout} className="p-2.5 bg-slate-900 border border-rose-500/30 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-all">
+                  <LogOut size={18} />
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setIsLoginModalOpen(true)} className={`flex items-center gap-2 p-2.5 bg-slate-900 border border-${tc}-500/30 rounded-xl text-${tc}-400 hover:bg-${tc}-500/10 transition-all shadow-lg group`}>
+                <Lock size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest pr-2 hidden group-hover:block transition-all">Đăng nhập</span>
+              </button>
+            )}
+          </div>
 
-            <button onClick={() => setIsTerminalOpen(true)} className="p-2.5 bg-slate-900 border border-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
-              <TerminalIcon size={18} />
-            </button>
-            
-            <button onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} className="text-xs font-black text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg">
-              {lang.toUpperCase()}
-            </button>
+          <div className="flex items-center gap-4 lg:hidden">
+            <button onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} className={`text-[10px] font-black text-${tc}-400 px-3 py-1.5 border border-${tc}-500/20 rounded-lg`}>{lang.toUpperCase()}</button>
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-slate-400"><Menu size={28}/></button>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section id="home" className="min-h-screen flex items-center pt-20 relative overflow-hidden">
-        {/* Background Layer */}
-        <div className="absolute top-0 left-0 w-full h-full -z-10">
-          {siteData.bannerImage ? (
-            <div className="absolute inset-0">
-               <img src={siteData.bannerImage} className="w-full h-full object-cover opacity-30" alt="Banner" />
-               <div className="absolute inset-0 bg-gradient-to-b from-[#020617]/40 via-[#020617]/80 to-[#020617]" />
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="fixed inset-0 z-[110] bg-slate-950/95 backdrop-blur-2xl flex flex-col p-10 pt-32">
+            <button onClick={() => setIsMenuOpen(false)} className="absolute top-10 right-10 p-2 text-slate-500"><X size={32}/></button>
+            <div className="flex flex-col gap-8">
+              {Object.keys(t.nav).map((key, i) => (
+                <motion.button 
+                  key={key} 
+                  initial={{ opacity: 0, x: -20 }} 
+                  animate={{ opacity: 1, x: 0, transition: { delay: i * 0.1 } }}
+                  onClick={() => scrollToSection(key)} 
+                  className="text-4xl font-black text-left uppercase tracking-tighter"
+                >
+                  {t.nav[key as keyof typeof t.nav]}
+                </motion.button>
+              ))}
+              <motion.button 
+                initial={{ opacity: 0, x: -20 }} 
+                animate={{ opacity: 1, x: 0, transition: { delay: 0.7 } }}
+                onClick={() => { setIsMenuOpen(false); isAdmin ? setIsTerminalOpen(true) : setIsLoginModalOpen(true); }}
+                className={`text-2xl font-black text-left uppercase tracking-tighter text-${tc}-400 flex items-center gap-4`}
+              >
+                {isAdmin ? <><Settings /> Quản trị</> : <><Lock /> Đăng nhập</>}
+              </motion.button>
             </div>
-          ) : (
-            <div className={`absolute top-[-10%] left-[-10%] w-[60%] h-[60%] ${theme === 'indigo' ? 'bg-indigo-600/10' : theme === 'emerald' ? 'bg-emerald-600/10' : 'bg-rose-600/10'} rounded-full blur-[180px]`} />
-          )}
-        </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        <div className="container mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest mb-10 text-slate-400">
-              <Sparkles size={14} className="text-indigo-400" />
-              {t.hero.badge}
+      <section id="home" className="min-h-screen flex items-center pt-20 px-6 relative overflow-hidden">
+        <div className={`absolute top-[-20%] left-[-10%] w-[80%] h-[80%] bg-${tc}-500/10 rounded-full blur-[180px] -z-10 animate-pulse`} />
+        <div className="container mx-auto">
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="max-w-5xl text-left">
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] md:text-xs font-bold text-${tc}-400 uppercase tracking-widest mb-8 md:mb-12`}>
+               <Sparkles size={14} /> {t.hero.badge}
             </div>
-            <h1 className="text-7xl md:text-9xl font-black mb-10 leading-[0.95] tracking-tighter">
+            <h1 className="text-[3.5rem] md:text-[8rem] lg:text-[10rem] font-black mb-8 leading-[0.9] tracking-tighter">
               {t.hero.titlePrefix} <br />
-              <span className={`bg-gradient-to-r ${theme === 'indigo' ? 'from-indigo-400 to-cyan-400' : theme === 'emerald' ? 'from-emerald-400 to-cyan-400' : 'from-rose-400 to-amber-400'} bg-clip-text text-transparent`}>{t.hero.titleSuffix}</span>
+              <span className="text-gradient">{t.hero.titleSuffix}</span>
             </h1>
-            <p className="text-xl text-slate-400 max-w-2xl leading-relaxed mb-12 font-medium">{t.hero.bio}</p>
+            <p className="text-lg md:text-2xl text-slate-400 max-w-3xl leading-relaxed mb-12 font-medium">{t.hero.bio}</p>
             <div className="flex flex-wrap gap-6 items-center">
-              <button onClick={() => scrollToSection('about')} className="px-10 py-5 bg-white text-black font-black rounded-2xl hover:bg-slate-200 transition-all flex items-center gap-3">
+              <button onClick={() => scrollToSection('projects')} className="px-8 md:px-12 py-5 bg-white text-black font-black rounded-2xl hover:bg-slate-200 transition-all flex items-center gap-3 shadow-2xl text-sm md:text-base">
                 {t.hero.explore} <ChevronRight size={20} />
               </button>
-              <SocialLinks />
+              
+              <div className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t.footer.live}: {Math.floor(Math.random() * 5) + 2}</span>
+              </div>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* About Section */}
-      <section id="about" className="py-32 relative overflow-hidden">
-        <div className="container mx-auto px-6">
+      {/* Profile Section */}
+      <section id="about" className="py-24 md:py-40 px-6 bg-slate-950/20">
+        <div className="container mx-auto">
           <SectionHeading icon={User} subtitle={t.about.expDesc} theme={theme}>{t.about.title}</SectionHeading>
-          
-          <div className="grid lg:grid-cols-2 gap-20 items-center">
-            <motion.div 
-              initial={{ opacity: 0, x: -50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="relative group"
-            >
-              <div className={`absolute -inset-4 rounded-[4rem] blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${THEMES[theme].bg}`} />
-              <div className="relative aspect-square rounded-[3.5rem] overflow-hidden border border-white/10 shadow-2xl bg-slate-900">
-                {siteData.profileImage ? (
-                  <img src={siteData.profileImage} alt="Đồng Minh Phú" loading="lazy" decoding="async" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 bg-slate-900">
-                    <User size={80} strokeWidth={1} />
-                    <span className="text-xs font-bold uppercase tracking-widest mt-4">Photo Placeholder</span>
-                  </div>
-                )}
-              </div>
-              <motion.div 
-                whileHover={{ scale: 1.05 }}
-                className="absolute -bottom-10 -right-10 glass p-8 rounded-3xl border border-white/10 shadow-2xl hidden md:block"
-              >
-                <div className={`text-4xl font-black mb-1 ${THEMES[theme].text}`}>{t.about.expTitle}</div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.about.expDesc}</div>
-              </motion.div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, x: 50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="space-y-12"
-            >
-              <div className="space-y-6">
-                <h3 className="text-3xl font-black leading-tight">Mở khóa tiềm năng kỹ thuật với các giải pháp phần mềm hiện đại.</h3>
-                <p className="text-lg text-slate-400 leading-relaxed">
-                  Tôi chuyên về thiết kế các hệ thống có khả năng mở rộng cao, tập trung vào hiệu năng thực tế và trải nghiệm người dùng cuối. Hành trình của tôi được định nghĩa bởi sự tò mò và cam kết không ngừng nghỉ đối với sự xuất sắc của mã nguồn.
+          <div className="grid lg:grid-cols-2 gap-12 md:gap-24 items-center">
+             <div className="relative aspect-square rounded-[2.5rem] md:rounded-[4rem] overflow-hidden border border-white/10 bg-slate-900 group">
+               {siteData.profileImage ? (
+                 <img src={siteData.profileImage} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-1000" />
+               ) : (
+                 <div className="w-full h-full flex items-center justify-center text-slate-800"><User size={120} strokeWidth={1} /></div>
+               )}
+               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent p-10 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-all">
+                  <p className="text-white font-black text-2xl uppercase tracking-tighter">Đồng Minh Phú</p>
+                  <p className="text-slate-400 font-bold">{t.about.role}</p>
+               </div>
+             </div>
+             <div className="space-y-8 md:space-y-12 text-left">
+                <p className="text-xl md:text-3xl font-medium text-slate-300 leading-tight">
+                  {t.about.bioExtended}
                 </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/5 space-y-3">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${THEMES[theme].bg} ${THEMES[theme].text}`}>
-                    <Trophy size={24} />
+                <div className="grid grid-cols-2 gap-4 md:gap-8">
+                  <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/5 hover:bg-white/10 transition-colors">
+                    <p className={`text-4xl md:text-6xl font-black text-${tc}-400 mb-2`}>{siteData.projects?.length || 40}+</p>
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500">{t.about.stats.projects}</p>
                   </div>
-                  <div>
-                    <div className="text-2xl font-black">50+</div>
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.about.stats.projects}</div>
+                  <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/5 hover:bg-white/10 transition-colors">
+                    <p className="text-4xl md:text-6xl font-black text-cyan-400 mb-2"><AnimatedCounter value={visitCount} /></p>
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500">{t.about.stats.visits}</p>
                   </div>
                 </div>
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/5 space-y-3">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${THEMES[theme].bg} ${THEMES[theme].text}`}>
-                    <Target size={24} />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-black">1M+</div>
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.about.stats.lines}</div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Code Lab Section */}
-      <section className="py-32 bg-slate-950/50">
-        <div className="container mx-auto px-6">
-          <SectionHeading icon={Code} subtitle={t.codelab.subtitle} theme={theme}>{t.codelab.title}</SectionHeading>
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h3 className="text-3xl font-bold">Tối ưu hiệu năng kiến trúc Micro-frontend</h3>
-              <p className="text-lg text-slate-400">Giải pháp xử lý state đồng nhất giữa các module độc lập bằng cách sử dụng Custom Events và Shared Service Layer.</p>
-              <div className="flex gap-4">
-                <div className="p-4 rounded-2xl bg-slate-900 border border-white/5">
-                  <Zap size={24} className="text-yellow-400 mb-2" />
-                  <div className="text-sm font-bold text-slate-300">LCP &lt; 1.2s</div>
-                </div>
-                <div className="p-4 rounded-2xl bg-slate-900 border border-white/5">
-                  <ShieldCheck size={24} className="text-green-400 mb-2" />
-                  <div className="text-sm font-bold text-slate-300">ISO/IEC 27001</div>
-                </div>
-              </div>
-            </div>
-            <div className="p-1 rounded-3xl bg-gradient-to-br from-white/10 to-transparent">
-              <div className="bg-black rounded-[1.4rem] p-8 font-mono text-sm overflow-hidden">
-                <div className="flex gap-2 mb-6">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/40" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
-                </div>
-                <pre className="text-indigo-300">
-{`const useOptimization = (config) => {
-  const [perf, setPerf] = useState(0);
-  
-  // Real-time architecture analysis
-  useEffect(() => {
-    const report = Performance.audit(config);
-    setPerf(report.score);
-  }, [config]);
-
-  return { score: perf, status: 'OPTIMIZED' };
-};`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* AI Innovation Lab */}
-      <section id="lab" className="py-32 relative">
-        <div className="absolute inset-0 bg-indigo-600/5 -z-10 blur-[120px]" />
-        <div className="container mx-auto px-6">
-          <SectionHeading icon={Wand2} subtitle={t.ailab.subtitle} theme={theme}>{t.ailab.title}</SectionHeading>
-          <AiDemoBuilder t={t} theme={theme} />
-        </div>
-      </section>
-
-      {/* Projects Grid */}
-      <section id="projects" className="py-32">
-        <div className="container mx-auto px-6">
-          <SectionHeading icon={Briefcase} subtitle={t.projects.subtitle} theme={theme}>{t.projects.title}</SectionHeading>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {siteData.projects.map((proj: Project) => (
-              <motion.div key={proj.id} whileHover={{ y: -10 }} className="group relative aspect-[4/5] rounded-[2.5rem] overflow-hidden bg-slate-900 border border-white/5 shadow-2xl">
-                {proj.image ? (
-                  <img src={proj.image} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={proj.title} />
-                ) : (
-                  <div className={`absolute inset-0 bg-gradient-to-br ${theme === 'indigo' ? 'from-indigo-900/40 to-slate-900' : theme === 'emerald' ? 'from-emerald-900/40 to-slate-900' : 'from-rose-900/40 to-slate-900'}`} />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent z-10" />
-                <div className="absolute bottom-0 left-0 right-0 p-10 z-20">
-                  <span className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-3 block">{proj.cat}</span>
-                  <h3 className="text-2xl font-black mb-4">{proj.title}</h3>
-                  <p className="text-slate-400 text-sm mb-6 line-clamp-2">{proj.desc}</p>
-                  <div className="flex gap-2 flex-wrap mb-8">
-                    {proj.tags?.map((tag: string) => <span key={tag} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold uppercase">{tag}</span>)}
-                  </div>
-                  <button className="flex items-center gap-2 text-sm font-black group-hover:gap-4 transition-all uppercase tracking-widest">
-                    VIEW PROJECT <ChevronRight size={16} className="text-indigo-400" />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+             </div>
           </div>
         </div>
       </section>
 
       {/* Skills Section */}
-      <section id="skills" className="py-32 bg-slate-950">
-        <div className="container mx-auto px-6">
-          <SectionHeading icon={Layers} theme={theme}>{t.skills.title}</SectionHeading>
-          <div className="grid md:grid-cols-3 gap-8">
-            {siteData.skills.map((skill: any) => (
-              <div key={skill.id} className="p-10 rounded-[2.5rem] bg-slate-900/50 border border-white/5 hover:border-indigo-500/20 transition-all">
-                <div className={`p-4 rounded-2xl inline-block mb-8 ${THEMES[theme].bg} ${THEMES[theme].text}`}>
-                  {skill.icon === 'Layout' ? <Layout /> : skill.icon === 'Cpu' ? <Cpu /> : <Globe />}
-                </div>
-                <h3 className="text-2xl font-black mb-6">{t.skills[skill.cat as keyof typeof t.skills] || skill.cat}</h3>
-                <div className="flex flex-wrap gap-2">
-                  {skill.items.map((s: string) => (
-                    <span key={s} className="px-4 py-2 rounded-xl bg-slate-950 border border-white/5 text-slate-400 text-xs font-bold">{s}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-32">
-        <div className="container mx-auto px-6">
-          <SectionHeading icon={Quote} subtitle={t.testimonials.subtitle} theme={theme}>{t.testimonials.title}</SectionHeading>
-          <div className="grid md:grid-cols-3 gap-8">
-            {siteData.testimonials.map((testi: any) => (
-              <motion.div key={testi.id} whileHover={{ y: -10 }} className="p-10 glass rounded-[2.5rem] border-white/5 relative">
-                <div className="flex gap-1 mb-6 text-yellow-500">
-                  {[...Array(5)].map((_, j) => <Star key={j} size={16} fill="currentColor" />)}
-                </div>
-                <p className="text-slate-300 text-lg italic mb-8">"{testi.content}"</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-slate-800" />
-                  <div>
-                    <div className="font-bold">{testi.author}</div>
-                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">{testi.role}</div>
+      <section id="skills" className="py-24 md:py-40 px-6">
+         <div className="container mx-auto">
+           <SectionHeading icon={Cpu} subtitle={t.skills.subtitle} theme={theme}>{t.skills.title}</SectionHeading>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10">
+              {siteData.skills.map((skill: Skill, idx: number) => (
+                <motion.div 
+                  key={skill.id}
+                  whileHover={{ y: -10 }}
+                  className="p-10 bg-white/5 border border-white/5 rounded-[3rem] group hover:bg-white/10 transition-all shadow-xl text-left"
+                >
+                  <div className={`w-16 h-16 rounded-2xl ${THEMES[theme].bg} ${THEMES[theme].text} flex items-center justify-center mb-10 group-hover:scale-110 transition-transform`}>
+                    <Cpu size={32} />
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Contact Section */}
-      <section id="contact" className="py-32 bg-slate-950/50">
-        <div className="container mx-auto px-6">
-          <SectionHeading icon={Mail} subtitle={t.contact.titleSuffix} theme={theme}>{t.contact.title}</SectionHeading>
-          <div className="grid lg:grid-cols-2 gap-20">
-            <div className="space-y-12">
-              <div className="space-y-8">
-                <div className="flex items-center gap-6">
-                  <div className={`p-4 rounded-2xl ${THEMES[theme].bg} ${THEMES[theme].text}`}><Phone size={24} /></div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{t.contact.labels.phone}</div>
-                    <div className="text-xl font-bold">{siteData.contactInfo.phone}</div>
+                  <h4 className="text-2xl font-black mb-8">{skill.cat}</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {skill.items.map(item => (
+                      <span key={item} className="px-4 py-2 bg-black/40 rounded-xl text-[11px] font-bold text-slate-400 border border-white/5">{item}</span>
+                    ))}
                   </div>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className={`p-4 rounded-2xl ${THEMES[theme].bg} ${THEMES[theme].text}`}><Mail size={24} /></div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{t.contact.labels.email}</div>
-                    <div className="text-xl font-bold">{siteData.contactInfo.email}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className={`p-4 rounded-2xl ${THEMES[theme].bg} ${THEMES[theme].text}`}><MapPin size={24} /></div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Location</div>
-                    <div className="text-xl font-bold">{siteData.contactInfo.address}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative aspect-video w-full rounded-[2.5rem] overflow-hidden border border-white/10 group shadow-2xl">
-                <iframe 
-                  title="Office Location"
-                  className="w-full h-full grayscale brightness-[0.4] contrast-[1.2] invert-[0.9] hue-rotate-[180deg]"
-                  src={`https://maps.google.com/maps?q=${encodeURIComponent(siteData.contactInfo.address)}&t=&z=14&ie=UTF8&iwloc=&output=embed`}
-                  frameBorder="0" 
-                  scrolling="no" 
-                  marginHeight={0} 
-                  marginWidth={0}
-                ></iframe>
-                <div className="absolute inset-0 bg-transparent z-10 cursor-default" />
-              </div>
-
-              <div>
-                <h4 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-6">Kết nối trực tiếp qua</h4>
-                <SocialLinks />
-              </div>
-            </div>
-
-            <div className="glass p-10 rounded-[3rem] border-white/5">
-              {isFormSubmitted ? (
-                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="h-full flex flex-col items-center justify-center text-center py-20">
-                  <div className="w-20 h-20 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center mb-6">
-                    <CheckCircle2 size={40} />
-                  </div>
-                  <h3 className="text-2xl font-black mb-4">{t.contact.labels.success}</h3>
                 </motion.div>
-              ) : (
-                <form onSubmit={handleContactSubmit} className="space-y-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">{t.contact.labels.name}</label>
-                      <input name="name" required className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">{t.contact.labels.email}</label>
-                      <input name="email" required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">{t.contact.labels.phone}</label>
-                    <input name="phone" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">{t.contact.labels.message}</label>
-                    <textarea name="message" required className="w-full h-32 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all resize-none" />
-                  </div>
-                  <button type="submit" className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-3">
-                    <Send size={18} /> {t.contact.labels.send}
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Newsletter Section */}
-      <section className="py-32 container mx-auto px-6">
-        <div className={`p-16 md:p-24 rounded-[3.5rem] ${THEMES[theme].primary} text-white relative overflow-hidden flex flex-col items-center text-center`}>
-          <div className="absolute inset-0 bg-black/20" />
-          <div className="relative z-10 max-w-2xl">
-            <h2 className="text-5xl font-black mb-6">{t.newsletter.title}</h2>
-            <p className="text-xl text-white/80 mb-10">{t.newsletter.subtitle}</p>
-            <div className="flex flex-col md:flex-row gap-4 w-full">
-              <input placeholder={t.newsletter.placeholder} className="flex-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-8 py-5 text-white placeholder:text-white/40 outline-none" />
-              <button className="px-10 py-5 bg-white text-black font-black rounded-2xl hover:bg-slate-100 transition-all">{t.newsletter.button}</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <footer className="py-20 border-t border-white/5 text-center">
-        <div className="container mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-10 mb-12">
-            <button onClick={() => scrollToSection('home')} className="text-3xl font-black tracking-tighter text-gradient">PHÚ.</button>
-            <div className="flex gap-8">
-              {['Home', 'About', 'Skills', 'Lab', 'Projects', 'Contact'].map(item => (
-                <button key={item} onClick={() => scrollToSection(item.toLowerCase())} className="text-xs font-bold text-slate-500 hover:text-white transition-all uppercase tracking-widest">
-                  {t.nav[item.toLowerCase() as keyof typeof t.nav]}
-                </button>
               ))}
-            </div>
-            <SocialLinks />
+           </div>
+         </div>
+      </section>
+
+      <section id="lab" className={`py-24 md:py-40 px-6 bg-${tc}-500/[0.02]`}>
+        <div className="container mx-auto">
+          <SectionHeading icon={Wand2} subtitle={t.ailab.subtitle} theme={theme}>{t.ailab.title}</SectionHeading>
+          <AiDemoBuilder t={t} theme={theme} tc={tc} />
+        </div>
+      </section>
+
+      <ProjectsSection t={t} siteData={siteData} theme={theme} tc={tc} setSelectedProject={setSelectedProject} />
+
+      <section id="course" className="py-24 md:py-40 px-6 bg-slate-950/20">
+        <div className="container mx-auto">
+          <SectionHeading icon={GraduationCap} subtitle={t.course.subtitle} theme={theme}>{t.course.title}</SectionHeading>
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12">
+             {siteData.courses && siteData.courses.map((c: Course) => (
+               <motion.div 
+                  key={c.id} 
+                  whileHover={{ scale: 1.02 }}
+                  className="p-8 md:p-12 bg-white/5 border border-white/10 rounded-[3rem] shadow-2xl relative overflow-hidden group text-left"
+               >
+                 <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <Rocket size={80} />
+                 </div>
+                 <div className="flex items-center gap-3 mb-6">
+                    <span className={`px-4 py-1.5 bg-${tc}-500/20 text-${tc}-400 rounded-full text-[10px] font-black uppercase tracking-widest`}>{c.level}</span>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Clock size={12}/> {c.duration}</span>
+                 </div>
+                 <h3 className="text-3xl font-black mb-6">{c.name}</h3>
+                 <p className="text-slate-400 mb-10 leading-relaxed text-lg">{c.desc}</p>
+                 <button 
+                  onClick={() => setSelectedCourse(c)}
+                  className={`px-8 py-4 bg-white text-black font-black rounded-2xl hover:bg-${tc}-400 hover:text-white transition-all uppercase tracking-widest text-sm`}
+                 >
+                   {t.course.enroll}
+                 </button>
+               </motion.div>
+             ))}
           </div>
-          
-          <div className="flex flex-col items-center gap-6 mb-10">
-            <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-white/5 border border-white/10 rounded-2xl">
-              <BarChart3 size={18} className="text-indigo-400" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                {t.stats.visits}: <span className="text-white text-sm ml-1">{siteData.visitCount?.toLocaleString() || 0}</span>
-              </span>
-            </div>
-            <p className="text-slate-500 text-xs font-black uppercase tracking-[0.3em]">© 2024 ĐỒNG MINH PHÚ STUDIO — BUILT WITH ART & CODE & INDEXEDDB</p>
-          </div>
-          
-          <div className="flex justify-center gap-6">
-            <button onClick={() => setIsAdminOpen(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-700 hover:text-white transition-all">
-              <Lock size={12} /> Digital CMS Pro
-            </button>
-          </div>
+        </div>
+      </section>
+
+      <section id="contact" className="py-24 md:py-40 px-6">
+        <div className="container mx-auto">
+           <SectionHeading icon={Mail} subtitle={t.contact.titleSuffix} theme={theme}>{t.contact.title}</SectionHeading>
+           <div className="grid lg:grid-cols-2 gap-12 md:gap-20">
+              <div className="space-y-6 md:space-y-10 text-left">
+                <div className="p-10 bg-white/5 rounded-[3rem] border border-white/5 shadow-2xl">
+                  <h4 className="font-black text-2xl mb-10 flex items-center gap-4"><Handshake className={`text-${tc}-400`} /> {t.contact.infoTitle}</h4>
+                  <div className="space-y-8">
+                    {[
+                      { icon: Mail, label: 'Email', val: siteData.contactInfo.email, color: `text-${tc}-400`, bg: `bg-${tc}-500/10` },
+                      { icon: Phone, label: lang === 'vi' ? 'SĐT' : 'Phone', val: siteData.contactInfo.phone, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+                      { icon: MapPin, label: lang === 'vi' ? 'Địa chỉ' : 'Location', val: siteData.contactInfo.address, color: 'text-purple-400', bg: 'bg-purple-500/10' }
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center gap-6">
+                         <div className={`w-14 h-14 rounded-2xl ${item.bg} ${item.color} flex items-center justify-center`}><item.icon size={24} /></div>
+                         <div>
+                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-1">{item.label}</p>
+                           <p className="text-slate-200 font-bold text-lg">{item.val}</p>
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Social Media Links Display */}
+                  {siteData.contactInfo.socials && (
+                    <div className="pt-8 mt-8 border-t border-white/5">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-6">Kết nối mạng xã hội</p>
+                      <div className="flex flex-wrap gap-4">
+                         {siteData.contactInfo.socials.facebook && (
+                           <a href={siteData.contactInfo.socials.facebook} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-xl bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-all border border-blue-500/20">
+                             <Facebook size={24} />
+                           </a>
+                         )}
+                         {siteData.contactInfo.socials.youtube && (
+                           <a href={siteData.contactInfo.socials.youtube} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white flex items-center justify-center transition-all border border-red-500/20">
+                             <Youtube size={24} />
+                           </a>
+                         )}
+                         {siteData.contactInfo.socials.tiktok && (
+                           <a href={siteData.contactInfo.socials.tiktok} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-xl bg-white/5 text-white hover:bg-black hover:border-white/20 flex items-center justify-center transition-all border border-white/10">
+                             <TiktokIcon size={20} />
+                           </a>
+                         )}
+                         {siteData.contactInfo.socials.zalo && (
+                           <a href={siteData.contactInfo.socials.zalo} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white flex items-center justify-center transition-all border border-blue-500/20">
+                             <ZaloIcon size={24} />
+                           </a>
+                         )}
+                         {siteData.contactInfo.socials.website && (
+                           <a href={siteData.contactInfo.socials.website} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-all border border-emerald-500/20">
+                             <LinkIcon size={24} />
+                           </a>
+                         )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-8 md:p-12 bg-white/5 rounded-[3rem] border border-white/10 shadow-2xl text-left">
+                  <form onSubmit={handleContactSubmit} className="space-y-6">
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black uppercase text-slate-600 ml-4">{t.contact.labels.name}</label>
+                       <input name="name" required className={`w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 transition-all text-sm`} />
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black uppercase text-slate-600 ml-4">{t.contact.labels.email}</label>
+                       <input name="email" type="email" required className={`w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 transition-all text-sm`} />
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black uppercase text-slate-600 ml-4">{t.contact.labels.message}</label>
+                       <textarea name="message" required className={`w-full h-40 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 resize-none transition-all text-sm`} />
+                    </div>
+                    <button type="submit" className={`w-full py-6 bg-${tc}-600 text-white font-black rounded-2xl shadow-xl hover:scale-[1.02] transition-all uppercase tracking-widest text-sm`}>
+                      {t.contact.labels.send}
+                    </button>
+                  </form>
+              </div>
+           </div>
+        </div>
+      </section>
+
+      <footer className="py-20 border-t border-white/5 text-center px-6 relative overflow-hidden">
+        <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-1/2 bg-${tc}-500/5 blur-[100px] -z-10`} />
+        <p className="text-slate-600 text-[10px] md:text-xs font-black uppercase tracking-[0.4em] mb-4">
+          {t.footer.copyright.replace('{year}', new Date().getFullYear().toString())}
+        </p>
+        <div className="flex justify-center gap-6 mt-6">
+           <button 
+             onClick={() => isAdmin ? setIsTerminalOpen(true) : setIsLoginModalOpen(true)} 
+             className={`text-slate-700 hover:text-${tc}-400 transition-all flex items-center gap-2 font-black uppercase tracking-widest text-[10px] border border-white/5 px-4 py-2 rounded-full hover:bg-white/5 shadow-inner`}
+           >
+             <ShieldCheck size={16} /> {isAdmin ? "TRUY CẬP QUẢN TRỊ" : "ĐĂNG NHẬP QUẢN TRỊ"}
+           </button>
         </div>
       </footer>
 
-      {/* Chat Assistant */}
-      <ChatAssistant lang={lang} t={t} theme={theme} />
-
-      {/* Back to Top Button */}
       <AnimatePresence>
-        {showBackToTop && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.5, y: 50 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.5, y: 50 }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => scrollToSection('home')}
-            className={`fixed bottom-10 left-10 z-[120] w-14 h-14 rounded-2xl ${THEMES[theme].primary} text-white shadow-2xl flex items-center justify-center border border-white/10`}
+        {selectedProject && (
+          <ProjectModal project={selectedProject} onClose={() => setSelectedProject(null)} t={t} theme={theme} tc={tc} />
+        )}
+        {selectedCourse && (
+          <CourseModal 
+            course={selectedCourse} 
+            onClose={() => setSelectedCourse(null)} 
+            t={t} 
+            siteData={siteData} 
+            persistSiteData={persistSiteData} 
+            tc={tc}
+          />
+        )}
+        {isLoginModalOpen && (
+          <LoginModal 
+            onClose={() => setIsLoginModalOpen(false)} 
+            onSuccess={() => { 
+              setIsAdmin(true); 
+              localStorage.setItem('phu_admin_token', 'phu_authorized_2025'); 
+              setIsLoginModalOpen(false); 
+              setIsTerminalOpen(true);
+            }}
+            adminPassword={siteData.adminPassword}
+            tc={tc}
+          />
+        )}
+      </AnimatePresence>
+
+      <ChatAssistant lang={lang} t={t} theme={theme} tc={tc} siteData={siteData} persistSiteData={persistSiteData} />
+      
+      <AdminPortal 
+        isOpen={isTerminalOpen} 
+        onClose={() => setIsTerminalOpen(false)} 
+        t={t} 
+        siteData={siteData} 
+        visitCount={visitCount} 
+        isAdmin={isAdmin}
+        persistSiteData={persistSiteData}
+        theme={theme}
+        tc={tc}
+      />
+    </div>
+  );
+};
+
+// --- Sub Components ---
+
+const ReadingProgress = ({ theme }: { theme: ThemeColor }) => {
+  const tc = THEME_COLORS[theme];
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
+  return <motion.div className={`fixed top-0 left-0 right-0 h-1 bg-${tc}-500 origin-left z-[250]`} style={{ scaleX }} />;
+};
+
+const LoginModal = ({ onClose, onSuccess, adminPassword, tc }: { onClose: () => void, onSuccess: () => void, adminPassword?: string, tc: string }) => {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const correctPassword = adminPassword || 'admin';
+    if (password === correctPassword) {
+      onSuccess();
+    } else {
+      setError(true);
+      setTimeout(() => setError(false), 2000);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      exit={{ opacity: 0 }} 
+      className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6"
+      onClick={onClose}
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }} 
+        animate={{ scale: 1, y: 0 }} 
+        className="w-full max-w-md bg-slate-900 border border-white/10 rounded-[2.5rem] p-10 md:p-12 shadow-2xl relative overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute top-0 right-0 p-8 opacity-5"><ShieldCheck size={120} /></div>
+        
+        <h2 className="text-3xl font-black mb-2 flex items-center gap-3">
+          <Lock className={`text-${tc}-400`} /> Phú OS Portal
+        </h2>
+        <p className="text-slate-500 text-sm mb-8 font-medium uppercase tracking-widest">Xác thực quyền quản trị</p>
+        
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Mật khẩu truy cập</label>
+            <input 
+              autoFocus
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className={`w-full bg-black/40 border ${error ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 transition-all text-white text-center font-black tracking-widest`}
+              placeholder="••••••••"
+            />
+            <p className="text-[9px] text-slate-600 mt-2 italic text-left">* Gợi ý: Mật khẩu mặc định là 'admin'</p>
+            {error && <p className="text-rose-500 text-[10px] font-black uppercase tracking-widest mt-2 ml-2">Mật mã không chính xác</p>}
+          </div>
+          
+          <button 
+            type="submit"
+            className={`w-full py-5 bg-${tc}-600 hover:bg-${tc}-500 text-white font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2`}
           >
-            <ArrowUp size={24} strokeWidth={3} />
-          </motion.button>
+            <KeyRound size={18} /> Đăng nhập ngay
+          </button>
+          
+          <button 
+            type="button"
+            onClick={onClose}
+            className="w-full py-2 text-slate-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest"
+          >
+            Hủy bỏ
+          </button>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const ProjectsSection = ({ t, siteData, theme, tc, setSelectedProject }: any) => {
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filtered = useMemo(() => {
+    let list = siteData.projects;
+    if (activeFilter !== 'all') {
+      const catMap: any = { web: 'Web App', ai: 'AI/ML', arch: 'Architecture' };
+      list = list.filter((p: any) => p.cat === catMap[activeFilter]);
+    }
+    if (searchTerm) {
+      list = list.filter((p: any) => p.title.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+    return list;
+  }, [activeFilter, searchTerm, siteData.projects]);
+
+  return (
+    <section id="projects" className="py-24 md:py-40 px-6">
+      <div className="container mx-auto">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-16">
+          <SectionHeading icon={Briefcase} subtitle={t.projects.subtitle} theme={theme}>{t.projects.title}</SectionHeading>
+          
+          <div className="flex flex-col gap-6 w-full md:w-auto">
+            <div className="relative group max-w-md w-full ml-auto">
+              <Search className={`absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-${tc}-400 transition-colors`} size={18} />
+              <input 
+                placeholder={t.projects.searchPlaceholder}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className={`w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-14 pr-6 outline-none focus:border-${tc}-500/50 transition-all text-sm`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <AnimatePresence mode="popLayout">
+            {filtered.map((proj: Project) => (
+              <motion.div 
+                key={proj.id}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                whileHover={{ y: -10 }}
+                onClick={() => setSelectedProject(proj)}
+                className="group relative aspect-[4/5] rounded-[3rem] overflow-hidden bg-slate-900 border border-white/5 cursor-pointer shadow-2xl"
+              >
+                {proj.image ? (
+                  <img src={proj.image} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 group-hover:opacity-40 transition-all duration-700" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-slate-800"><Briefcase size={80} strokeWidth={1} /></div>
+                )}
+                
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent p-10 flex flex-col justify-end text-left">
+                   <div className="space-y-4">
+                     <span className={`inline-block px-3 py-1 rounded-full ${THEMES[theme as ThemeColor].bg} ${THEMES[theme as ThemeColor].text} text-[8px] font-black uppercase tracking-widest`}>
+                       {proj.cat}
+                     </span>
+                     <h3 className="text-3xl font-black text-white leading-tight">{proj.title}</h3>
+                     <p className="text-slate-400 text-sm line-clamp-2 opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 duration-500">{proj.desc}</p>
+                   </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const ProjectModal = ({ project, onClose, t, theme, tc }: any) => (
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-10" onClick={onClose}>
+    <motion.div initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} className="w-full max-w-6xl h-full md:h-auto md:max-h-[90vh] bg-slate-900 rounded-[2.5rem] md:rounded-[4rem] border border-white/10 overflow-hidden flex flex-col md:flex-row" onClick={e => e.stopPropagation()}>
+      <div className="md:w-1/2 relative bg-slate-950 min-h-[250px] md:min-h-full">
+        {project.image ? <img src={project.image} className="w-full h-full object-cover opacity-60" /> : <div className="h-full flex items-center justify-center text-slate-800"><ImageIcon size={64}/></div>}
+      </div>
+      <div className="md:w-1/2 p-10 md:p-20 overflow-y-auto custom-scrollbar text-left">
+        <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter mb-4">{project.title}</h2>
+        <p className="text-xl text-slate-300 leading-relaxed mb-12">{project.longDesc || project.desc}</p>
+        <div className="flex flex-wrap gap-4 mb-12">
+           {project.tags?.map((tag: string) => (
+             <span key={tag} className={`px-5 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-${tc}-400`}>{tag}</span>
+           ))}
+        </div>
+        <button onClick={onClose} className={`px-10 py-5 bg-${tc}-600 rounded-2xl text-white font-black uppercase tracking-widest text-xs hover:bg-${tc}-500 transition-all`}>Đóng cửa sổ</button>
+      </div>
+    </motion.div>
+  </motion.div>
+);
+
+const CourseModal = ({ course, onClose, t, siteData, persistSiteData, tc }: any) => {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: '', email: '', goals: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState('');
+
+  const submit = async () => {
+    setIsSubmitting(true);
+    const newReg: Registration = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: form.name,
+      email: form.email,
+      course: course.name,
+      timestamp: new Date().toISOString()
+    };
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const resp = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `I want to join the course "${course.name}". My goals are: "${form.goals}". Provide a 2-sentence personalized learning advice.`,
+      });
+      setAiSuggestion(resp.text || '');
+    } catch(e) {}
+
+    await persistSiteData({
+      ...siteData,
+      registrations: [...(siteData.registrations || []), newReg]
+    });
+    setStep(2);
+    setIsSubmitting(false);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4" onClick={onClose}>
+      <motion.div initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }} className="w-full max-w-2xl bg-slate-900 rounded-[3rem] border border-white/10 p-10 md:p-16 relative overflow-hidden" onClick={e => e.stopPropagation()}>
+         <div className={`absolute top-[-10%] right-[-10%] w-60 h-60 bg-${tc}-500/10 rounded-full blur-[80px] -z-10`} />
+         
+         {step === 1 ? (
+           <div className="space-y-8 text-left">
+              <div className="space-y-2">
+                <h2 className="text-3xl md:text-5xl font-black text-white">{t.course.enroll}</h2>
+                <p className={`text-${tc}-400 font-bold uppercase tracking-widest text-sm`}>{course.name}</p>
+              </div>
+              <div className="space-y-6">
+                 <input placeholder={t.contact.labels.name} value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={`w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 transition-all`} />
+                 <input placeholder={t.contact.labels.email} value={form.email} onChange={e => setForm({...form, email: e.target.value})} className={`w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 transition-all`} />
+                 <textarea placeholder="Mục tiêu học tập của bạn?" value={form.goals} onChange={e => setForm({...form, goals: e.target.value})} className={`w-full h-32 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-${tc}-500 transition-all resize-none`} />
+                 <button 
+                  onClick={submit}
+                  disabled={!form.name || !form.email || isSubmitting}
+                  className={`w-full py-5 bg-${tc}-600 rounded-2xl font-black uppercase text-white hover:scale-[1.02] transition-all flex items-center justify-center gap-3 disabled:opacity-50`}
+                 >
+                   {isSubmitting ? <RefreshCcw size={20} className="animate-spin" /> : <Rocket size={20}/>}
+                   Xác nhận ghi danh
+                 </button>
+              </div>
+           </div>
+         ) : (
+           <div className="text-center space-y-8 py-10">
+              <div className="w-24 h-24 bg-green-500/10 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={48} /></div>
+              <h2 className="text-3xl font-black text-white">{t.course.success}</h2>
+              {aiSuggestion && (
+                <div className={`p-8 bg-${tc}-500/5 border border-${tc}-500/10 rounded-3xl text-left`}>
+                  <p className={`text-xs font-black uppercase tracking-widest text-${tc}-400 mb-4 flex items-center gap-2`}><Sparkles size={14} /> AI Lời khuyên</p>
+                  <p className="text-slate-300 leading-relaxed italic">"{aiSuggestion}"</p>
+                </div>
+              )}
+              <button onClick={onClose} className="px-12 py-4 bg-white text-black font-black rounded-2xl hover:bg-slate-200 transition-all uppercase tracking-widest text-sm">Quay lại</button>
+           </div>
+         )}
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const AiDemoBuilder = ({ t, tc }: any) => {
+  const [prompt, setPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [demoData, setDemoData] = useState<any>(null);
+
+  const generate = async () => {
+    if(!prompt.trim()) return;
+    setIsGenerating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const resp = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Architect a demo for: "${prompt}". Return JSON with: title, vibe, hero:{title, subtitle}, features:[{title, desc}].`,
+        config: { responseMimeType: "application/json" }
+      });
+      setDemoData(JSON.parse(resp.text || '{}'));
+    } catch (e) { console.error(e); }
+    setIsGenerating(false);
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-12 text-left">
+      <div className="p-8 md:p-12 bg-white/5 rounded-[3rem] border border-white/10 shadow-2xl">
+        <textarea 
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          placeholder={t.ailab.placeholder}
+          className={`w-full h-32 md:h-40 bg-black/40 border border-white/10 rounded-2xl px-8 py-6 outline-none focus:border-${tc}-500 transition-all resize-none text-lg`}
+        />
+        <button 
+          onClick={generate}
+          disabled={isGenerating || !prompt.trim()}
+          className={`w-full py-6 mt-6 bg-gradient-to-r from-${tc}-600 to-cyan-600 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl transition-all disabled:opacity-50 text-white`}
+        >
+          {isGenerating ? <RefreshCcw size={20} className="animate-spin" /> : <Wand2 size={20} />}
+          {isGenerating ? t.ailab.generating : t.ailab.button}
+        </button>
+      </div>
+      
+      {demoData && (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-10 bg-white/5 border border-${tc}-500/20 rounded-[3rem] shadow-2xl relative`}>
+          <div className="flex justify-between items-start mb-8">
+            <h3 className="text-3xl font-black text-white">{demoData.title}</h3>
+            <span className={`px-4 py-1.5 bg-${tc}-500 text-white rounded-full text-[10px] font-black uppercase tracking-widest`}>{demoData.vibe}</span>
+          </div>
+          <div className="mb-12">
+            <h4 className="text-4xl md:text-5xl font-black text-gradient mb-4">{demoData.hero.title}</h4>
+            <p className="text-slate-400 text-lg">{demoData.hero.subtitle}</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            {demoData.features.map((f: any, i: number) => (
+              <div key={i} className="p-6 bg-black/40 border border-white/5 rounded-2xl">
+                <h5 className={`font-black text-${tc}-400 mb-2 uppercase tracking-widest text-xs`}>{f.title}</h5>
+                <p className="text-slate-300 text-sm leading-relaxed">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+const ChatAssistant = ({ lang, t, theme, tc, siteData, persistSiteData }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const sessionId = useRef(`session_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`);
+
+  useEffect(() => {
+    if(isOpen && messages.length === 0) setMessages([{ role: 'ai', text: t.chat.welcome }]);
+  }, [isOpen, messages.length, t.chat.welcome]);
+
+  const logChat = (role: 'user' | 'ai', text: string) => {
+    const newLog: ChatLogEntry = {
+      sessionId: sessionId.current,
+      role,
+      text,
+      timestamp: new Date().toISOString()
+    };
+    persistSiteData({
+      ...siteData,
+      chatLogs: [...(siteData.chatLogs || []), newLog]
+    });
+  };
+
+  const send = async (e?: any) => {
+    e?.preventDefault();
+    if(!input.trim()) return;
+    const msg = input;
+    
+    setMessages(prev => [...prev, { role: 'user', text: msg }]);
+    setInput('');
+    setIsTyping(true);
+    
+    logChat('user', msg);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const resp = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Language: ${lang}. You are Phu's AI assistant. Brief answers. User says: ${msg}`,
+        config: { systemInstruction: "Helpful, futuristic, professional. Focus on architecture and engineering." }
+      });
+      const aiText = resp.text || '...';
+      setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
+      logChat('ai', aiText);
+    } catch(e) { console.error(e); }
+    setIsTyping(false);
+  };
+
+  return (
+    <div className="fixed bottom-6 right-6 md:bottom-10 md:right-10 z-[200]">
+      <button onClick={() => setIsOpen(!isOpen)} className={`w-16 h-16 rounded-full bg-${tc}-600 flex items-center justify-center shadow-2xl hover:scale-110 transition-all border border-white/20`}>
+        {isOpen ? <X className="text-white"/> : <Bot className="text-white" />}
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="absolute bottom-20 right-0 w-[90vw] md:w-[400px] h-[500px] glass rounded-[2.5rem] border border-white/10 p-8 flex flex-col shadow-2xl overflow-hidden text-left">
+            <div className="flex items-center gap-4 mb-6">
+               <div className={`w-12 h-12 rounded-2xl bg-${tc}-500/20 text-${tc}-400 flex items-center justify-center`}><Bot size={24}/></div>
+               <div><h3 className="font-black text-lg">{t.chat.agent}</h3><span className="text-[10px] text-green-500 font-bold uppercase tracking-widest flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"/> Online</span></div>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 mb-6 px-1">
+               {messages.map((m, i) => (
+                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${m.role === 'user' ? `bg-${tc}-600 text-white rounded-tr-none` : 'bg-white/5 text-slate-300 rounded-tl-none border border-white/5'}`}>{m.text}</div>
+                 </div>
+               ))}
+               {isTyping && <div className="text-xs text-slate-500 animate-pulse font-bold">{t.chat.typing}</div>}
+            </div>
+            <form onSubmit={send} className="relative">
+              <input value={input} onChange={e => setInput(e.target.value)} className={`w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm outline-none focus:border-${tc}-500`} placeholder="..." />
+              <button type="submit" className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 text-${tc}-400`}><Send size={18}/></button>
+            </form>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 };
 
-const ChatAssistant = ({ lang, t, theme }: { lang: Language, t: any, theme: ThemeColor }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{role: 'user' | 'bot', text: string}[]>([]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+// --- New Admin Portal ---
+const AdminPortal = ({ isOpen, onClose, t, siteData, visitCount, isAdmin, persistSiteData, theme, tc }: any) => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'skills' | 'courses' | 'content' | 'messages' | 'terminal' | 'settings' | 'info'>('dashboard');
+  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
+  const [terminalInput, setTerminalInput] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [editContentLang, setEditContentLang] = useState<Language>('vi');
 
-  useEffect(() => { setMessages([{role: 'bot', text: t.chat.welcome}]); }, [lang, t.chat.welcome]);
-
-  const handleSend = async () => {
-    if (!input.trim() || isTyping) return;
-    const userText = input;
-    setInput('');
-    setMessages(prev => [...prev, {role: 'user', text: userText}]);
-    setIsTyping(true);
-
-    try {
+  const handleCommand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    const cmdRaw = terminalInput.trim();
+    const [cmd, ...args] = cmdRaw.toLowerCase().split(' ');
+    
+    let response = `> ${cmdRaw}\n`;
+    if (cmd === 'help') {
+      response += `Available commands:\n- stats: View system statistics\n- clear: Clear terminal\n- logout: Terminate session\n- analysis: Run AI data audit\n- set-pass [new]: Change admin password`;
+    } else if (cmd === 'stats') {
+      response += `Active Visits: ${visitCount}\nProjects: ${siteData.projects?.length || 0}\nRegistrations: ${siteData.registrations?.length || 0}\nInquiries: ${siteData.inquiries?.length || 0}`;
+    } else if (cmd === 'clear') {
+      setTerminalHistory([]);
+      setTerminalInput('');
+      return;
+    } else if (cmd === 'analysis') {
+      setIsProcessing(true);
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
+      const resp = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: userText,
-        config: {
-          systemInstruction: `You are Phú's Digital Representative. Professional, witty, and extremely technical. Respond in ${lang}. Mention that you are powered by Gemini 3 and a custom IndexedDB architecture.`,
-        }
+        contents: `Summarize business potential from these inquiries: ${JSON.stringify(siteData.inquiries?.slice(-5))}`,
       });
-      setMessages(prev => [...prev, {role: 'bot', text: response.text || ''}]);
-    } catch (e) {
-      setMessages(prev => [...prev, {role: 'bot', text: 'Disconnected.'}]);
-    } finally {
-      setIsTyping(false);
+      response += `[AI REPORT]\n${resp.text}`;
+      setIsProcessing(false);
+    } else if (cmd === 'set-pass') {
+      if (args[0]) {
+        await persistSiteData({ ...siteData, adminPassword: args[0] });
+        response += `[SUCCESS] Admin password updated.`;
+      } else response += `[ERROR] Missing argument.`;
+    } else {
+      response += `[ERROR] Command not found: ${cmd}`;
+    }
+
+    setTerminalHistory(prev => [...prev, response]);
+    setTerminalInput('');
+  };
+
+  const handleProjectImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && editingProject) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert("File quá lớn! Vui lòng chọn ảnh dưới 5MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditingProject({ ...editingProject, image: reader.result as string });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
+  const deleteProject = async (id: string) => {
+    if (confirm('Are you sure you want to delete this project?')) {
+      const updated = siteData.projects.filter((p: any) => p.id !== id);
+      await persistSiteData({ ...siteData, projects: updated });
+    }
+  };
+
+  const deleteCourse = async (id: string) => {
+    if (confirm('Are you sure you want to delete this course?')) {
+      const updated = siteData.courses.filter((c: any) => c.id !== id);
+      await persistSiteData({ ...siteData, courses: updated });
+    }
+  };
+
+  const saveProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const proj: Project = {
+      id: editingProject?.id || Math.random().toString(36).substr(2, 9),
+      title: formData.get('title') as string,
+      desc: formData.get('desc') as string,
+      longDesc: formData.get('longDesc') as string,
+      tags: (formData.get('tags') as string).split(',').map(s => s.trim()),
+      cat: formData.get('cat') as string,
+      image: formData.get('image') as string,
+    };
+
+    let updatedProjects;
+    if (editingProject?.id) {
+      updatedProjects = siteData.projects.map((p: any) => p.id === proj.id ? proj : p);
+    } else {
+      updatedProjects = [...(siteData.projects || []), proj];
+    }
+
+    await persistSiteData({ ...siteData, projects: updatedProjects });
+    setEditingProject(null);
+  };
+
+  const saveCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const course: Course = {
+      id: editingCourse?.id || Math.random().toString(36).substr(2, 9),
+      name: formData.get('name') as string,
+      level: formData.get('level') as string,
+      duration: formData.get('duration') as string,
+      desc: formData.get('desc') as string,
+    };
+
+    let updatedCourses;
+    if (editingCourse?.id) {
+      updatedCourses = siteData.courses.map((c: any) => c.id === course.id ? course : c);
+    } else {
+      updatedCourses = [...(siteData.courses || []), course];
+    }
+    await persistSiteData({ ...siteData, courses: updatedCourses });
+    setEditingCourse(null);
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert("File quá lớn! Vui lòng chọn ảnh dưới 5MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        persistSiteData({ ...siteData, profileImage: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed bottom-10 right-10 z-[120]">
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div initial={{ opacity: 0, y: 20, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }} className="absolute bottom-24 right-0 w-[380px] h-[500px] glass rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border-white/10">
-            <div className={`p-6 ${THEMES[theme].primary} flex justify-between items-center`}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center"><Zap size={20} /></div>
-                <div className="font-black text-sm">{t.chat.agent}</div>
-              </div>
-              <button onClick={() => setIsOpen(false)}><X size={20} /></button>
-            </div>
-            <div className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-4 rounded-3xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-900 border border-white/5'}`}>{m.text}</div>
+    <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-0 md:p-6 backdrop-blur-2xl">
+      <div className="w-full max-w-[95vw] h-full md:h-[90vh] bg-slate-900 md:rounded-[2.5rem] border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-[0_0_100px_rgba(0,0,0,0.8)] text-left">
+        
+        {/* Sidebar */}
+        <div className="w-full md:w-64 bg-slate-950/50 border-r border-white/5 flex flex-col">
+          <div className="p-8 border-b border-white/5">
+            <h3 className="text-xl font-black text-white flex items-center gap-3">
+              <ShieldCheck className={`text-${tc}-400`} /> ADMIN
+            </h3>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-2">PhuOS v1.2</p>
+          </div>
+          
+          <div className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
+            {[
+              { id: 'dashboard', icon: Layout, label: 'Thống kê' },
+              { id: 'content', icon: FileText, label: 'Nội dung CMS' },
+              { id: 'projects', icon: Briefcase, label: 'Dự án' },
+              { id: 'courses', icon: GraduationCap, label: 'Khóa học' },
+              { id: 'skills', icon: Cpu, label: 'Kỹ năng' },
+              { id: 'info', icon: UserCog, label: 'Thông tin' },
+              { id: 'messages', icon: Inbox, label: 'Tin nhắn' },
+              { id: 'terminal', icon: TerminalIcon, label: 'Terminal' },
+              { id: 'settings', icon: Settings, label: 'Cài đặt' },
+            ].map(item => (
+              <button 
+                key={item.id}
+                onClick={() => setActiveTab(item.id as any)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? `bg-${tc}-600 text-white shadow-lg shadow-${tc}-500/20` : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+              >
+                <item.icon size={16} />
+                <span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="p-6 border-t border-white/5">
+            <button onClick={onClose} className="w-full py-4 bg-white/5 hover:bg-rose-500/10 hover:text-rose-400 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">
+              Đóng Console
+            </button>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10 relative">
+          {!isAdmin ? (
+             <div className="flex flex-col items-center justify-center h-full space-y-8">
+               <ShieldAlert size={100} className="text-rose-500" />
+               <h1 className="text-4xl font-black">ACCESS DENIED</h1>
+               <button onClick={onClose} className="px-10 py-4 bg-white text-black font-black rounded-xl">Quay lại</button>
+             </div>
+          ) : (
+            <>
+              {activeTab === 'dashboard' && (
+                <div className="space-y-10">
+                  <header>
+                    <h1 className="text-4xl md:text-5xl font-black mb-4">Chào buổi sáng, Phú</h1>
+                    <p className="text-slate-400">Hệ thống của bạn đang hoạt động ổn định.</p>
+                  </header>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {[
+                      { label: 'Visits', value: visitCount, color: `text-${tc}-400`, icon: Eye },
+                      { label: 'Inquiries', value: siteData.inquiries?.length || 0, color: 'text-cyan-400', icon: Mail },
+                      { label: 'Academy', value: siteData.registrations?.length || 0, color: 'text-emerald-400', icon: GraduationCap },
+                      { label: 'Projects', value: siteData.projects?.length || 0, color: 'text-purple-400', icon: Briefcase },
+                    ].map(stat => (
+                      <div key={stat.label} className="p-8 bg-white/5 border border-white/5 rounded-3xl">
+                        <stat.icon className={`${stat.color} mb-6`} size={24} />
+                        <p className="text-3xl font-black">{stat.value}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-2">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid lg:grid-cols-2 gap-8">
+                    <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem]">
+                       <h4 className="text-xl font-black mb-8 flex items-center gap-3"><History size={20}/> Hoạt động gần đây</h4>
+                       <div className="space-y-6">
+                          {siteData.chatLogs?.slice(-5).reverse().map((log: any, i: number) => (
+                            <div key={i} className="flex gap-4 p-4 bg-black/20 rounded-2xl border border-white/5">
+                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${log.role === 'ai' ? `bg-${tc}-500/10 text-${tc}-400` : 'bg-white/10 text-white'}`}>
+                                 {log.role === 'ai' ? <Bot size={18}/> : <User size={18}/>}
+                               </div>
+                               <div>
+                                 <p className="text-xs font-bold text-slate-200">{log.text}</p>
+                                 <p className="text-[9px] text-slate-600 mt-1 uppercase">{new Date(log.timestamp).toLocaleString()}</p>
+                               </div>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                    <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem]">
+                       <h4 className="text-xl font-black mb-8 flex items-center gap-3"><Users size={20}/> Học viên mới</h4>
+                       <div className="space-y-4">
+                          {siteData.registrations?.slice(-5).reverse().map((reg: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center p-4 bg-black/20 rounded-2xl border border-white/5">
+                              <div>
+                                <p className="text-sm font-black">{reg.name}</p>
+                                <p className={`text-[10px] text-${tc}-400 font-bold uppercase`}>{reg.course}</p>
+                              </div>
+                              <p className="text-[9px] text-slate-600">{reg.timestamp.slice(0, 10)}</p>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  </div>
                 </div>
-              ))}
-              {isTyping && <div className="text-xs text-slate-500 animate-pulse">{t.chat.typing}</div>}
-            </div>
-            <div className="p-4 bg-slate-900/50 border-t border-white/5">
-              <input value={input} onChange={e => setInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSend()} className="w-full bg-slate-950 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500" placeholder="Type a message..." />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <button onClick={() => setIsOpen(!isOpen)} className={`w-16 h-16 rounded-3xl ${THEMES[theme].primary} text-white shadow-2xl flex items-center justify-center`}><MessageSquare size={28} /></button>
+              )}
+
+              {activeTab === 'projects' && (
+                <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-3xl font-black">Quản lý Dự án</h2>
+                    <button 
+                      onClick={() => setEditingProject({ id: '', title: '', desc: '', longDesc: '', tags: [], cat: 'Web App' })}
+                      className={`px-6 py-3 bg-${tc}-600 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2`}
+                    >
+                      <PlusCircle size={18} /> Thêm Mới
+                    </button>
+                  </div>
+
+                  {editingProject ? (
+                    <motion.form 
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                      onSubmit={saveProject} 
+                      className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] space-y-6"
+                    >
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tiêu đề</label>
+                          <input name="title" defaultValue={editingProject.title} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm" required />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Phân loại</label>
+                          <select name="cat" defaultValue={editingProject.cat} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm appearance-none">
+                            <option value="Architecture">Architecture</option>
+                            <option value="AI/ML">AI/ML</option>
+                            <option value="Web App">Web App</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Mô tả ngắn</label>
+                        <input name="desc" defaultValue={editingProject.desc} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm" required />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Mô tả chi tiết</label>
+                        <textarea name="longDesc" defaultValue={editingProject.longDesc} className="w-full h-32 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm resize-none" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Công nghệ (cách nhau bằng dấu phẩy)</label>
+                        <input name="tags" defaultValue={editingProject.tags.join(', ')} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm" />
+                      </div>
+                      
+                      {/* Image Upload Section */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Hình ảnh dự án</label>
+                        <div className="space-y-4">
+                          {editingProject.image ? (
+                            <div className="relative w-full h-64 rounded-2xl overflow-hidden group border border-white/10 bg-black/40">
+                              <img src={editingProject.image} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                                <button type="button" onClick={() => setEditingProject({...editingProject, image: ''})} className="p-3 bg-rose-500/20 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all"><Trash2 size={20}/></button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-full h-32 bg-black/40 border border-dashed border-white/10 rounded-2xl flex items-center justify-center text-slate-500">
+                              <div className="text-center">
+                                <ImageIcon size={32} className="mx-auto mb-2 opacity-50" />
+                                <p className="text-[10px] uppercase font-bold">Chưa có ảnh</p>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex gap-4">
+                             <label className={`cursor-pointer px-6 py-4 bg-${tc}-600 hover:bg-${tc}-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all flex-shrink-0`}>
+                                <Upload size={18} /> Tải ảnh
+                                <input type="file" accept="image/*" className="hidden" onChange={handleProjectImageUpload} />
+                             </label>
+                             <div className="flex-1">
+                                <input 
+                                  name="image"
+                                  placeholder="Hoặc nhập URL ảnh..."
+                                  value={editingProject.image || ''}
+                                  onChange={(e) => setEditingProject({...editingProject, image: e.target.value})}
+                                  className={`w-full h-full bg-black/40 border border-white/10 rounded-2xl px-6 text-sm focus:border-${tc}-500 outline-none`}
+                                />
+                             </div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 italic ml-2">* Hỗ trợ JPG, PNG, WebP (Max 5MB)</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4 pt-4">
+                        <button type="submit" className={`px-10 py-4 bg-${tc}-600 text-white rounded-xl text-xs font-black uppercase`}>Lưu dự án</button>
+                        <button type="button" onClick={() => setEditingProject(null)} className="px-10 py-4 bg-white/5 text-slate-400 rounded-xl text-xs font-black uppercase">Hủy</button>
+                      </div>
+                    </motion.form>
+                  ) : (
+                    <div className="grid gap-4">
+                      {siteData.projects.map((proj: Project) => (
+                        <div key={proj.id} className="flex items-center justify-between p-6 bg-white/5 border border-white/5 rounded-3xl hover:bg-white/10 transition-all">
+                          <div className="flex items-center gap-6">
+                            <div className="w-16 h-12 bg-slate-800 rounded-xl overflow-hidden border border-white/10 flex items-center justify-center">
+                              {proj.image ? <img src={proj.image} className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-slate-600"/>}
+                            </div>
+                            <div>
+                              <p className="font-black text-white">{proj.title}</p>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase">{proj.cat}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => setEditingProject(proj)} className={`p-3 bg-white/5 hover:bg-${tc}-500/20 text-${tc}-400 rounded-xl transition-all`}><Pencil size={18}/></button>
+                            <button onClick={() => deleteProject(proj.id)} className="p-3 bg-white/5 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-all"><Trash2 size={18}/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'courses' && (
+                <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-3xl font-black">Quản lý Khóa học</h2>
+                    <button 
+                      onClick={() => setEditingCourse({ id: '', name: '', level: 'Beginner', duration: '', desc: '' })}
+                      className={`px-6 py-3 bg-${tc}-600 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2`}
+                    >
+                      <PlusCircle size={18} /> Thêm Khóa học
+                    </button>
+                  </div>
+                  
+                  {editingCourse ? (
+                    <motion.form 
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                      onSubmit={saveCourse} 
+                      className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] space-y-6"
+                    >
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tên khóa học</label>
+                          <input name="name" defaultValue={editingCourse.name} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm" required />
+                        </div>
+                         <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Thời lượng</label>
+                          <input name="duration" defaultValue={editingCourse.duration} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm" required />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cấp độ</label>
+                          <input name="level" defaultValue={editingCourse.level} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm" required />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Mô tả</label>
+                        <textarea name="desc" defaultValue={editingCourse.desc} className="w-full h-32 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm resize-none" required />
+                      </div>
+                      <div className="flex gap-4 pt-4">
+                        <button type="submit" className={`px-10 py-4 bg-${tc}-600 text-white rounded-xl text-xs font-black uppercase`}>Lưu</button>
+                        <button type="button" onClick={() => setEditingCourse(null)} className="px-10 py-4 bg-white/5 text-slate-400 rounded-xl text-xs font-black uppercase">Hủy</button>
+                      </div>
+                    </motion.form>
+                  ) : (
+                    <div className="grid gap-4">
+                      {siteData.courses?.map((c: Course) => (
+                        <div key={c.id} className="flex items-center justify-between p-6 bg-white/5 border border-white/5 rounded-3xl hover:bg-white/10 transition-all">
+                           <div>
+                              <p className="font-black text-white">{c.name}</p>
+                              <div className="flex gap-3 mt-1">
+                                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-indigo-300">{c.level}</span>
+                                <span className="text-[10px] text-slate-500">{c.duration}</span>
+                              </div>
+                           </div>
+                           <div className="flex gap-2">
+                            <button onClick={() => setEditingCourse(c)} className={`p-3 bg-white/5 hover:bg-${tc}-500/20 text-${tc}-400 rounded-xl transition-all`}><Pencil size={18}/></button>
+                            <button onClick={() => deleteCourse(c.id)} className="p-3 bg-white/5 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-all"><Trash2 size={18}/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'skills' && (
+                <div className="space-y-8">
+                  <h2 className="text-3xl font-black">Quản lý Kỹ năng</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {siteData.skills.map((skill: Skill, idx: number) => (
+                      <div key={skill.id} className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem]">
+                        <div className="flex justify-between items-center mb-6">
+                           <h4 className="text-xl font-black">{skill.cat}</h4>
+                           <button onClick={() => {
+                             if(confirm('Xóa nhóm kỹ năng này?')) {
+                               const updated = siteData.skills.filter((s:any) => s.id !== skill.id);
+                               persistSiteData({...siteData, skills: updated});
+                             }
+                           }} className="text-rose-500 p-2"><Trash2 size={16}/></button>
+                        </div>
+                        <div className="space-y-4">
+                           <div className="flex flex-wrap gap-2">
+                             {skill.items.map((item: string) => (
+                               <span key={item} className="px-3 py-1 bg-black/40 rounded-lg text-xs font-bold text-slate-400 flex items-center gap-2 group">
+                                 {item}
+                                 <button onClick={() => {
+                                   const newItems = skill.items.filter(i => i !== item);
+                                   const updatedSkills = siteData.skills.map((s:any) => s.id === skill.id ? {...s, items: newItems} : s);
+                                   persistSiteData({...siteData, skills: updatedSkills});
+                                 }} className="hover:text-rose-500"><X size={10}/></button>
+                               </span>
+                             ))}
+                           </div>
+                           <div className="flex gap-2">
+                             <input id={`new-skill-${skill.id}`} className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs" placeholder="Thêm kỹ năng..." 
+                               onKeyDown={(e) => {
+                                 if(e.key === 'Enter') {
+                                    const val = (e.target as HTMLInputElement).value;
+                                    if(val) {
+                                      const updatedSkills = siteData.skills.map((s:any) => s.id === skill.id ? {...s, items: [...s.items, val]} : s);
+                                      persistSiteData({...siteData, skills: updatedSkills});
+                                      (e.target as HTMLInputElement).value = '';
+                                    }
+                                 }
+                               }}
+                             />
+                           </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="p-8 border-2 border-dashed border-white/10 rounded-[2.5rem] flex items-center justify-center">
+                       <button 
+                         onClick={() => {
+                           const name = prompt('Tên nhóm kỹ năng mới:');
+                           if(name) {
+                             const newSkill = { id: Date.now().toString(), cat: name, icon: 'Cpu', items: [] };
+                             persistSiteData({...siteData, skills: [...siteData.skills, newSkill]});
+                           }
+                         }}
+                         className="flex flex-col items-center gap-2 text-slate-500 hover:text-white transition-colors"
+                       >
+                         <PlusCircle size={32} />
+                         <span className="text-xs font-black uppercase tracking-widest">Thêm Nhóm</span>
+                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'content' && (
+                <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                     <h2 className="text-3xl font-black">Nội dung CMS</h2>
+                     <div className="flex bg-white/5 p-1 rounded-xl">
+                       <button onClick={() => setEditContentLang('vi')} className={`px-4 py-2 rounded-lg text-xs font-black ${editContentLang === 'vi' ? `bg-${tc}-600 text-white` : 'text-slate-400'}`}>VIETNAMESE</button>
+                       <button onClick={() => setEditContentLang('en')} className={`px-4 py-2 rounded-lg text-xs font-black ${editContentLang === 'en' ? `bg-${tc}-600 text-white` : 'text-slate-400'}`}>ENGLISH</button>
+                     </div>
+                  </div>
+                  
+                  <div className="space-y-8">
+                     {/* Hero Section */}
+                     <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-4">
+                        <h4 className={`text-${tc}-400 font-black uppercase tracking-widest text-xs mb-4`}>Hero Section</h4>
+                        <div className="grid md:grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Badge</label>
+                             <input 
+                              defaultValue={siteData.translations[editContentLang].hero.badge} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].hero.badge = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" 
+                             />
+                           </div>
+                           <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Tiêu đề (Prefix)</label>
+                             <input 
+                              defaultValue={siteData.translations[editContentLang].hero.titlePrefix} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].hero.titlePrefix = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" 
+                             />
+                           </div>
+                        </div>
+                        <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Tiêu đề (Suffix - Gradient)</label>
+                             <input 
+                              defaultValue={siteData.translations[editContentLang].hero.titleSuffix} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].hero.titleSuffix = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" 
+                             />
+                        </div>
+                        <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Giới thiệu ngắn (Bio)</label>
+                             <textarea 
+                              defaultValue={siteData.translations[editContentLang].hero.bio} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].hero.bio = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full h-24 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm resize-none" 
+                             />
+                        </div>
+                     </div>
+
+                     {/* About Section */}
+                     <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-4">
+                        <h4 className={`text-${tc}-400 font-black uppercase tracking-widest text-xs mb-4`}>About Section</h4>
+                        <div className="grid md:grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Chức danh</label>
+                             <input 
+                              defaultValue={siteData.translations[editContentLang].about.role} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].about.role = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" 
+                             />
+                           </div>
+                           <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Năm kinh nghiệm (Title)</label>
+                             <input 
+                              defaultValue={siteData.translations[editContentLang].about.expTitle} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].about.expTitle = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" 
+                             />
+                           </div>
+                        </div>
+                        <div className="space-y-2">
+                             <label className="text-[10px] text-slate-500 font-bold uppercase">Giới thiệu chi tiết</label>
+                             <textarea 
+                              defaultValue={siteData.translations[editContentLang].about.bioExtended} 
+                              onBlur={(e) => {
+                                const newData = JSON.parse(JSON.stringify(siteData));
+                                newData.translations[editContentLang].about.bioExtended = e.target.value;
+                                persistSiteData(newData);
+                              }}
+                              className="w-full h-32 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm resize-none" 
+                             />
+                        </div>
+                     </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'info' && (
+                <div className="space-y-8">
+                  <h2 className="text-3xl font-black">Thông tin Cá nhân</h2>
+                  <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Ảnh đại diện</label>
+                      <div className="flex gap-6 items-start">
+                        <div className="w-24 h-24 rounded-2xl bg-slate-800 overflow-hidden border border-white/10 flex-shrink-0 relative group">
+                            {siteData.profileImage ? (
+                              <img src={siteData.profileImage} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-slate-600"><User size={32}/></div>
+                            )}
+                            {siteData.profileImage && (
+                              <button 
+                                onClick={() => persistSiteData({...siteData, profileImage: null})}
+                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-rose-400"
+                              >
+                                <Trash2 size={20} />
+                              </button>
+                            )}
+                        </div>
+                        <div className="flex-1 space-y-3">
+                           <div className="flex gap-3">
+                              <label className={`cursor-pointer px-6 py-3 bg-${tc}-600 hover:bg-${tc}-500 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all`}>
+                                <Upload size={16} /> Tải ảnh lên
+                                <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                              </label>
+                              <div className="text-[10px] text-slate-500 flex items-center">
+                                * Hỗ trợ JPG, PNG (Max 5MB)
+                              </div>
+                           </div>
+                           <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"><ExternalLink size={14}/></span>
+                              <input 
+                                defaultValue={siteData.profileImage || ''}
+                                placeholder="Hoặc nhập URL ảnh..."
+                                onBlur={(e) => persistSiteData({...siteData, profileImage: e.target.value})}
+                                className={`w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm focus:border-${tc}-500 outline-none transition-all`}
+                              />
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-6">
+                       <div className="space-y-2">
+                          <label className="text-[10px] text-slate-500 font-bold uppercase">Email</label>
+                          <input 
+                            defaultValue={siteData.contactInfo.email}
+                            onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, email: e.target.value}})}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                          />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] text-slate-500 font-bold uppercase">Số điện thoại</label>
+                          <input 
+                            defaultValue={siteData.contactInfo.phone}
+                            onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, phone: e.target.value}})}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                          />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] text-slate-500 font-bold uppercase">Địa chỉ</label>
+                          <input 
+                            defaultValue={siteData.contactInfo.address}
+                            onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, address: e.target.value}})}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                          />
+                       </div>
+                    </div>
+
+                    <div className="border-t border-white/10 pt-6 mt-4">
+                      <h4 className={`text-sm font-black text-${tc}-400 uppercase tracking-widest mb-6 flex items-center gap-2`}>
+                        <Share2 size={16} /> Liên kết Mạng xã hội
+                      </h4>
+                      <div className="space-y-4">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2"><Facebook size={12}/> Facebook URL</label>
+                            <input 
+                              defaultValue={siteData.contactInfo.socials?.facebook || ''}
+                              onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, socials: {...(siteData.contactInfo.socials || {}), facebook: e.target.value}}})}
+                              placeholder="https://facebook.com/..."
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2"><Youtube size={12}/> Youtube URL</label>
+                            <input 
+                              defaultValue={siteData.contactInfo.socials?.youtube || ''}
+                              onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, socials: {...(siteData.contactInfo.socials || {}), youtube: e.target.value}}})}
+                              placeholder="https://youtube.com/..."
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2"><TiktokIcon size={12}/> TikTok URL</label>
+                            <input 
+                              defaultValue={siteData.contactInfo.socials?.tiktok || ''}
+                              onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, socials: {...(siteData.contactInfo.socials || {}), tiktok: e.target.value}}})}
+                              placeholder="https://tiktok.com/..."
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2"><ZaloIcon size={12}/> Zalo URL</label>
+                            <input 
+                              defaultValue={siteData.contactInfo.socials?.zalo || ''}
+                              onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, socials: {...(siteData.contactInfo.socials || {}), zalo: e.target.value}}})}
+                              placeholder="https://zalo.me/..."
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2"><LinkIcon size={12}/> Website URL</label>
+                            <input 
+                              defaultValue={siteData.contactInfo.socials?.website || ''}
+                              onBlur={(e) => persistSiteData({...siteData, contactInfo: {...siteData.contactInfo, socials: {...(siteData.contactInfo.socials || {}), website: e.target.value}}})}
+                              placeholder="https://..."
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'terminal' && (
+                <div className="h-full flex flex-col font-mono text-emerald-400">
+                  <div className="flex-1 overflow-y-auto space-y-2 p-6 bg-black/40 border border-white/5 rounded-3xl mb-4 custom-scrollbar">
+                    <p className={`text-${tc}-400 font-bold`}>[PhuOS 1.2 Session Initialized]</p>
+                    <p className="text-slate-500 italic">Type 'help' for commands.</p>
+                    {terminalHistory.map((h, i) => (
+                      <pre key={i} className="whitespace-pre-wrap text-sm leading-relaxed">{h}</pre>
+                    ))}
+                    {isProcessing && <p className={`animate-pulse text-${tc}-300 font-bold`}>[SYSTEM ANALYZING DATA STREAM...]</p>}
+                  </div>
+                  <form onSubmit={handleCommand} className="flex gap-2 p-4 bg-black border border-white/10 rounded-2xl">
+                    <span className={`text-${tc}-500 font-bold`}>phu@os:~$</span>
+                    <input 
+                      autoFocus 
+                      value={terminalInput} 
+                      onChange={e => setTerminalInput(e.target.value)}
+                      className="bg-transparent outline-none flex-1 text-emerald-400 text-sm"
+                      autoComplete="off"
+                    />
+                  </form>
+                </div>
+              )}
+
+              {activeTab === 'messages' && (
+                <div className="space-y-10">
+                   <h2 className="text-4xl font-black">Yêu cầu Liên hệ</h2>
+                   <div className="grid gap-6">
+                      {siteData.inquiries?.length ? (
+                        [...siteData.inquiries].reverse().map((msg: Inquiry) => (
+                          <div key={msg.id} className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-4">
+                             <div className="flex justify-between items-start">
+                               <div>
+                                 <h4 className="text-xl font-black">{msg.name}</h4>
+                                 <p className={`text-${tc}-400 text-xs font-bold`}>{msg.email}</p>
+                               </div>
+                               <p className="text-[10px] text-slate-600 font-black uppercase">{new Date(msg.timestamp).toLocaleString()}</p>
+                             </div>
+                             <p className={`text-slate-300 text-sm leading-relaxed italic border-l-2 border-${tc}-500/30 pl-4`}>"{msg.message}"</p>
+                             <div className="flex justify-end gap-3">
+                               <button className={`px-6 py-2 bg-${tc}-500/10 text-${tc}-400 rounded-xl text-[10px] font-black uppercase`}>Phản hồi</button>
+                               <button 
+                                onClick={async () => {
+                                  if(confirm('Delete message?')) {
+                                    const updated = siteData.inquiries.filter((m: any) => m.id !== msg.id);
+                                    await persistSiteData({ ...siteData, inquiries: updated });
+                                  }
+                                }}
+                                className="p-2 text-rose-500/50 hover:text-rose-500 transition-colors"
+                               ><Trash size={18}/></button>
+                             </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-20 text-slate-600">
+                          <Inbox size={60} className="mx-auto mb-6 opacity-20" />
+                          <p className="text-xl font-black uppercase tracking-widest">Hộp thư trống</p>
+                        </div>
+                      )}
+                   </div>
+                </div>
+              )}
+
+              {activeTab === 'settings' && (
+                <div className="space-y-10">
+                  <h2 className="text-4xl font-black">Cấu hình Hệ thống</h2>
+                  <div className="max-w-2xl space-y-8">
+                    
+                    {/* Theme Selector */}
+                    <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-6">
+                       <h4 className="text-xl font-black">Giao diện</h4>
+                       <div className="space-y-4">
+                          <p className="text-[10px] font-black uppercase text-slate-500 ml-2">Màu chủ đạo</p>
+                          <div className="flex flex-wrap gap-4">
+                            {Object.keys(THEME_COLORS).map((colorKey) => {
+                              const isActive = theme === colorKey;
+                              const displayColor = THEME_COLORS[colorKey as ThemeColor];
+                              return (
+                                <button 
+                                  key={colorKey}
+                                  onClick={() => persistSiteData({ ...siteData, theme: colorKey })}
+                                  className={`px-6 py-3 rounded-xl border flex items-center gap-2 transition-all ${isActive ? `bg-${displayColor}-600 border-${displayColor}-500 text-white shadow-lg` : 'bg-black/40 border-white/10 text-slate-400 hover:text-white'}`}
+                                >
+                                  <div className={`w-3 h-3 rounded-full bg-${displayColor}-500`} />
+                                  <span className="text-xs font-black uppercase tracking-widest">{colorKey}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-6">
+                       <h4 className="text-xl font-black">Bảo mật</h4>
+                       <div className="space-y-4">
+                          <label className="block text-[10px] font-black uppercase text-slate-500 ml-2">Mật khẩu quản trị mới</label>
+                          <div className="flex gap-4">
+                            <input 
+                              type="password" 
+                              id="newAdminPass"
+                              placeholder="Nhập mật khẩu mới..."
+                              className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm"
+                            />
+                            <button 
+                              onClick={async () => {
+                                const val = (document.getElementById('newAdminPass') as HTMLInputElement).value;
+                                if(val) {
+                                  await persistSiteData({ ...siteData, adminPassword: val });
+                                  alert('Đã đổi mật khẩu!');
+                                  (document.getElementById('newAdminPass') as HTMLInputElement).value = '';
+                                }
+                              }}
+                              className={`px-8 bg-${tc}-600 text-white font-black rounded-2xl text-[10px] uppercase`}
+                            >Cập nhật</button>
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-6">
+                       <h4 className="text-xl font-black">Dữ liệu</h4>
+                       <div className="grid grid-cols-2 gap-4">
+                          <button 
+                            onClick={() => {
+                              const blob = new Blob([JSON.stringify(siteData, null, 2)], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `phu_os_backup_${new Date().toISOString().slice(0, 10)}.json`;
+                              a.click();
+                            }}
+                            className="p-6 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-all flex flex-col items-center gap-3"
+                          >
+                             <Download size={24} className={`text-${tc}-400`} />
+                             <span className="text-[10px] font-black uppercase tracking-widest">Sao lưu JSON</span>
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              if(confirm('RESET TO DEFAULT? This will wipe all current data.')) {
+                                await persistSiteData(INITIAL_DATA);
+                                window.location.reload();
+                              }
+                            }}
+                            className="p-6 bg-white/5 border border-white/5 rounded-2xl hover:bg-rose-500/10 transition-all flex flex-col items-center gap-3"
+                          >
+                             <RefreshCcw size={24} className="text-rose-400" />
+                             <span className="text-[10px] font-black uppercase tracking-widest">Đặt lại Hệ thống</span>
+                          </button>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
